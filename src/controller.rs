@@ -1,4 +1,4 @@
-#![allow(unused_imports, unused_variables)]
+#![allow(unused_imports, unused_variables, dead_code)]
 use crate::capi::cluster::{Cluster, ClusterStatus};
 use crate::{capi, telemetry, Error, Metrics, Result};
 use chrono::{DateTime, Utc};
@@ -7,7 +7,8 @@ use kube::{
     api::{Api, ListParams, Patch, PatchParams, ResourceExt},
     client::Client,
     runtime::controller::{Action, Controller},
-    runtime::events::{Recorder, Reporter},
+    runtime::events::{Event, EventType, Recorder, Reporter},
+    runtime::finalizer::{finalizer, Event as Finalizer},
     runtime::watcher::Config,
     Resource,
 };
@@ -17,6 +18,9 @@ use serde_json::json;
 use std::sync::Arc;
 use tokio::{sync::RwLock, time::Duration};
 use tracing::*;
+
+pub static FINALIZER: &str = "fleet.addons.cluster.x-k8s.io";
+
 
 // Context for the reconciler
 #[derive(Clone)]
@@ -29,8 +33,23 @@ pub struct Context {
     pub metrics: Metrics,
 }
 
-#[instrument(skip(ctx, cluster), fields(trace_id))]
-async fn reconcile(cluster: Arc<Cluster>, ctx: Arc<Context>) -> Result<Action> {
+#[instrument(skip(ctx, c), fields(trace_id))]
+async fn reconcile(c: Arc<Cluster>, ctx: Arc<Context>) -> Result<Action> {
+    let trace_id = telemetry::get_trace_id();
+    Span::current().record("trace_id", &field::display(&trace_id));
+    let cfg = Config::default();
+    let _timer = ctx.metrics.count_and_measure();
+    ctx.diagnostics.write().await.last_event = Utc::now();
+    let ns = c.namespace().unwrap();
+
+    let cluster: Api<Cluster> = Api::namespaced(ctx.client.clone(), &ns);
+    //let metadata = cluster.meta();
+
+    //if cluster.get_status().await.unwrap()
+
+    //debug!("Reconciling Cluster \"{}\" in {}", cluster.name_any(), ns);
+    //finalizer()
+
     Ok(Action::await_change())
 }
 
@@ -38,6 +57,16 @@ fn error_policy(doc: Arc<Cluster>, error: &Error, ctx: Arc<Context>) -> Action {
     warn!("reconcile failed: {:?}", error);
     ctx.metrics.reconcile_failure(&doc, error);
     Action::requeue(Duration::from_secs(5 * 60))
+}
+
+impl Cluster {
+    async fn reconcile(&self, ctx: Arc<Context>) -> Result<Action> {
+        Ok(Action::requeue(Duration::from_secs(5 * 60)))
+    }
+
+    async fn cleanup(&self, ctx: Arc<Context>) -> Result<Action> {
+        Ok(Action::await_change())
+    }
 }
 
 /// Diagnostics to be exposed by the web server

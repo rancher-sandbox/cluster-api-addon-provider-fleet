@@ -1,0 +1,18 @@
+namespace: caapf-system
+
+namePrefix: caapf-
+
+commonLabels:
+  cluster.x-k8s.io/provider: "fleet"
+
+bases:
+- ../rbac
+- ../manager
+
+patchesStrategicMerge:
+# Provide customizable hook for make targets.
+- manager_image_patch.yaml
+- manager_pull_policy.yaml
+
+configurations:
+  - kustomizeconfig.yaml
