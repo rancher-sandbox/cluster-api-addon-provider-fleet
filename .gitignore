@@ -3,3 +3,6 @@
 controller
 audit
 audit.yaml
+_out/
+.vscode/
+.idea/
