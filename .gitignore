@@ -6,3 +6,4 @@ audit.yaml
 _out/
 .vscode/
 .idea/
+child.kubeconfig

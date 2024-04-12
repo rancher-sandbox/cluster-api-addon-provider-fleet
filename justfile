@@ -47,23 +47,36 @@ build-otel: (_build "telemetry")
 # Start local dev environment
 start-dev:
     rm -rf _out/ || true
+    just update-helm-repos
     kind delete cluster --name dev || true
     kind create cluster --config --image=kindest/node:v{{KUBE_VERSION}} --config testdata/kind-config.yaml
     just install-fleet
     just install-capi
     kubectl wait pods --for=condition=Ready --timeout=300s --all --all-namespaces
 
+# Stop the local dev environment
+stop-dev:
+    kind delete cluster --name dev || true
+
+# Deploy CRS to dev cluster
+deploy-crs:
+    kubectl --context kind-dev apply -f testdata/crs.yaml
+
+# Deploy child cluster using docker & kubead,
+deploy-child-cluster:
+    kubectl --context kind-dev apply -f testdata/cluster_docker_kcp.yaml
+
 # Add and update helm repos used
 update-helm-repos:
-    helm repo add gitea-charts https://dl.gitea.com/charts/
+    #helm repo add gitea-charts https://dl.gitea.com/charts/
     helm repo add fleet https://rancher.github.io/fleet-helm-charts/
-    helm repo add jetstack https://charts.jetstack.io
-    helm repo add traefik https://traefik.github.io/charts
-    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+    #helm repo add jetstack https://charts.jetstack.io
+    #helm repo add traefik https://traefik.github.io/charts
+    #helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
     helm repo update
 
 # Install fleet into the k8s cluster
-install-fleet:
+install-fleet: create-out-dir
     #!/usr/bin/env bash
     set -euxo pipefail
     kubectl config view -o json --raw | jq -r '.clusters[].cluster["certificate-authority-data"]' | base64 -d > _out/ca.pem
@@ -73,7 +86,7 @@ install-fleet:
 
 # Install cluster api and any providers
 install-capi:
-    clusterctl init -i docker
+    EXP_CLUSTER_RESOURCE_SET=true CLUSTER_TOPOLOGY=true clusterctl init -i docker
 
 # Deploy will deploy the operator
 deploy:

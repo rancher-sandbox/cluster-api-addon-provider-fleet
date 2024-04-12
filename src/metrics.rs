@@ -1,4 +1,4 @@
-use crate::capi::cluster::Cluster;
+use crate::api::capi_cluster::Cluster;
 use crate::Error;
 use kube::ResourceExt;
 use prometheus::{histogram_opts, opts, HistogramVec, IntCounter, IntCounterVec, Registry};
