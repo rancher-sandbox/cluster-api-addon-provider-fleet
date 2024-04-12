@@ -27,8 +27,7 @@ impl Error {
 /// Expose all controller components used by main
 pub mod controller;
 pub use crate::controller::*;
-pub mod capi;
-pub mod fleet;
+pub mod api;
 
 /// Log and trace integrations
 pub mod telemetry;

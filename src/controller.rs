@@ -1,16 +1,21 @@
 #![allow(unused_imports, unused_variables, dead_code)]
-use crate::capi::cluster::{Cluster, ClusterStatus};
-use crate::{capi, telemetry, Error, Metrics, Result};
+use crate::api::capi_cluster::{Cluster, ClusterStatus};
+use crate::api::fleet_cluster::{Cluster as fleetcluster, ClusterSpec as fleetspec};
+use crate::{telemetry, Error, Metrics, Result};
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
+use kube::runtime::reflector::Lookup;
 use kube::{
-    api::{Api, ListParams, Patch, PatchParams, ResourceExt},
+    api::{Api, ListParams, Patch, PatchParams, PostParams, ResourceExt},
     client::Client,
-    runtime::controller::{Action, Controller},
-    runtime::events::{Event, EventType, Recorder, Reporter},
-    runtime::finalizer::{finalizer, Event as Finalizer},
-    runtime::watcher::Config,
-    Resource,
+    core::{object::HasStatus, ErrorResponse},
+    runtime::{
+        controller::{Action, Controller},
+        events::{Event, EventType, Recorder, Reporter},
+        finalizer::{finalizer, Event as Finalizer},
+        watcher::Config,
+    },
+    CustomResource, Error as kubeerror, Resource,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -19,8 +24,8 @@ use std::sync::Arc;
 use tokio::{sync::RwLock, time::Duration};
 use tracing::*;
 
-pub static FINALIZER: &str = "fleet.addons.cluster.x-k8s.io";
-
+pub static FLEET_FINALIZER: &str = "fleet.addons.cluster.x-k8s.io";
+pub static CONTROLPLANE_READY_CONDITION: &str = "ControlPlaneReady";
 
 // Context for the reconciler
 #[derive(Clone)]
@@ -40,17 +45,19 @@ async fn reconcile(c: Arc<Cluster>, ctx: Arc<Context>) -> Result<Action> {
     let cfg = Config::default();
     let _timer = ctx.metrics.count_and_measure();
     ctx.diagnostics.write().await.last_event = Utc::now();
-    let ns = c.namespace().unwrap();
 
-    let cluster: Api<Cluster> = Api::namespaced(ctx.client.clone(), &ns);
-    //let metadata = cluster.meta();
-
-    //if cluster.get_status().await.unwrap()
-
-    //debug!("Reconciling Cluster \"{}\" in {}", cluster.name_any(), ns);
-    //finalizer()
-
-    Ok(Action::await_change())
+    let cluster_name = c.name_any();
+    let ns = c.metadata.namespace.as_ref().unwrap();
+    let cluster_api: Api<Cluster> = Api::namespaced(ctx.client.clone(), &ns);
+    debug!("Reconciling Cluster \"{}\" in {}", cluster_name, ns);
+    finalizer(&cluster_api, FLEET_FINALIZER, c, |event| async {
+        match event {
+            Finalizer::Apply(c) => c.reconcile(ctx.clone()).await,
+            Finalizer::Cleanup(c) => c.cleanup(ctx.clone()).await,
+        }
+    })
+    .await
+    .map_err(|e| Error::FinalizerError(Box::new(e)))
 }
 
 fn error_policy(doc: Arc<Cluster>, error: &Error, ctx: Arc<Context>) -> Action {
@@ -61,12 +68,118 @@ fn error_policy(doc: Arc<Cluster>, error: &Error, ctx: Arc<Context>) -> Action {
 
 impl Cluster {
     async fn reconcile(&self, ctx: Arc<Context>) -> Result<Action> {
-        Ok(Action::requeue(Duration::from_secs(5 * 60)))
+        let client = ctx.client.clone();
+        let _recorder = ctx.diagnostics.read().await.recorder(client.clone(), self);
+        //let ns = self.namespace().unwrap();
+        let ns = self.metadata.namespace.as_ref().unwrap();
+        let name = self.name_any();
+        let clusters_api: Api<Cluster> = Api::namespaced(client.clone(), &ns);
+
+        let status = self.status().unwrap();
+        if !cluster_ready(status) {
+            return Ok(Action::requeue(Duration::from_secs(30)));
+        }
+        debug!("cluster has control plane ready \"{}\" in {}", name, ns);
+
+        match self.reconcile_fleet_cluster(ctx.clone()).await {
+            Err(e) => {
+                error!("Failed reconciling fleet cluster: {}", e);
+            }
+            Ok(_) => {
+                debug!("Reconciled Fleet cluster")
+            }
+        }
+
+        //Ok(Action::requeue(Duration::from_secs(5 * 60)))#
+        // let jitter = rand::thread_rng().gen_range(0..60);
+        // Ok(Action::requeue(Duration::from_secs(
+        //     cfg.reconcile_ttl + jitter,
+        // )))
+        Ok(Action::await_change())
     }
 
     async fn cleanup(&self, ctx: Arc<Context>) -> Result<Action> {
         Ok(Action::await_change())
     }
+
+    pub async fn reconcile_fleet_cluster(&self, ctx: Arc<Context>) -> Result<Action> {
+        let cluster_name = self.name_any();
+        let ns = self.metadata.namespace.as_ref().unwrap();
+        let client = ctx.client.clone();
+
+        let fleet_api: Api<fleetcluster> = Api::namespaced(client.clone(), ns);
+
+        let fleet_cluster = match fleet_api.get(&cluster_name).await {
+            Ok(obj) => Ok(Some(obj)),
+            Err(kubeerror::Api(ErrorResponse { reason, .. })) if &reason == "NotFound" => Ok(None),
+            Err(err) => Err(err),
+        };
+
+        match fleet_cluster {
+            Err(err) => {
+                error!("failed gettinmg fleet cluster: {}", err)
+            }
+            Ok(fc) => match fc {
+                Some(_) => {
+                    debug!("fleet cluster already exists, do nothing");
+                    return Ok(Action::await_change());
+                }
+                None => debug!("fleet cluster does not exist, creating"),
+            },
+        }
+
+        let kubeconfig = format!("{}-kubeconfig", cluster_name);
+        let fcluster = fleetcluster::new(
+            &cluster_name,
+            fleetspec {
+                agent_affinity: None,
+                agent_env_vars: None,
+                agent_namespace: None,
+                agent_resources: None,
+                agent_tolerations: None,
+                client_id: None,
+                kube_config_secret: Some(kubeconfig),
+                kube_config_secret_namespace: None,
+                paused: None,
+                private_repo_url: None,
+                redeploy_agent_generation: None,
+                template_values: None,
+            },
+        );
+
+        //TODO: copy labels from capi cluster
+
+        let pp = PostParams::default();
+        match fleet_api.create(&pp, &fcluster).await {
+            Err(err) => {
+                error!("Failed creating fleet cluster: {}", err);
+            }
+            Ok(_) => {
+                debug!("created fleet cluster");
+            }
+        }
+
+        Ok(Action::await_change())
+    }
+}
+
+fn cluster_ready(status: &ClusterStatus) -> bool {
+    if let Some(control_plane_ready) = status.control_plane_ready {
+        if control_plane_ready {
+            return true;
+        }
+    }
+
+    if let Some(conditions) = &status.conditions {
+        let read_condition = conditions.iter().find(|condition| {
+            condition.type_ == CONTROLPLANE_READY_CONDITION && condition.status == "True"
+        });
+        if read_condition.is_some() {
+            return true;
+        }
+    }
+
+    false
 }
 
 /// Diagnostics to be exposed by the web server
