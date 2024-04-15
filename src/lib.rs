@@ -8,10 +8,19 @@ pub enum Error {
     #[error("Kube Error: {0}")]
     KubeError(#[source] kube::Error),
 
+    #[error("Fleet cluster lookup error: {0}")]
+    FleetClusterLookupError(#[source] kube::Error),
+
+    #[error("Fleet cluster create error: {0}")]
+    FleetClusterCreateError(#[source] kube::Error),
+
     #[error("Finalizer Error: {0}")]
     // NB: awkward type because finalizer::Error embeds the reconciler error (which is this)
     // so boxing this error to break cycles
     FinalizerError(#[source] Box<kube::runtime::finalizer::Error<Error>>),
+
+    #[error("Missing cluster namespace")]
+    ClusterNamespaceMissing,
 
     #[error("IllegalDocument")]
     IllegalDocument,
