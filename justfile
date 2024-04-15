@@ -2,10 +2,28 @@ NAME := "cluster-api-fleet-controller"
 KUBE_VERSION := env_var_or_default('KUBE_VERSION', '1.26.3')
 ORG := "ghcr.io/rancher-sandbox"
 TAG := "dev"
+HOME_DIR := env_var('HOME')
+YQ_VERSION := "v4.43.1"
+YQ_BIN := "_out/yq"
+ARCH := if arch() == "aarch64" { "arm64"} else { "amd64" }
 
 [private]
 default:
     @just --list --unsorted --color=always
+
+# Generates stuff
+generate:
+    just generate-crds
+
+# generates files for CRDS
+generate-crds: _create-out-dir _install-kopium _download-yq
+    just _generate-kopium-url {{home_directory()}}/.cargo/bin/kopium "https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/main/config/crd/bases/cluster.x-k8s.io_clusters.yaml" "src/api/capi_cluster.rs"
+    just _generate-kopium-url {{home_directory()}}/.cargo/bin/kopium "https://raw.githubusercontent.com/rancher/fleet/main/charts/fleet-crd/templates/crds.yaml" "src/api/fleet_cluster.rs" "select(.spec.names.singular==\"cluster\")"
+    just _generate-kopium-url {{home_directory()}}/.cargo/bin/kopium "https://raw.githubusercontent.com/rancher/fleet/main/charts/fleet-crd/templates/crds.yaml" "src/api/fleet_clustergroup.rs" "select(.spec.names.singular==\"clustergroup\")"
+
+[private]
+_generate-kopium-url kpath="" source="" dest="" yqexp=".":
+    curl -sSL {{source}} | {{YQ_BIN}} '{{yqexp}}' | {{kpath}} -D Default -f - > {{dest}}
 
 # run with opentelemetry
 run-telemetry:
@@ -76,7 +94,7 @@ update-helm-repos:
     helm repo update
 
 # Install fleet into the k8s cluster
-install-fleet: create-out-dir
+install-fleet: _create-out-dir
     #!/usr/bin/env bash
     set -euxo pipefail
     kubectl config view -o json --raw | jq -r '.clusters[].cluster["certificate-authority-data"]' | base64 -d > _out/ca.pem
@@ -98,7 +116,25 @@ undeploy:
 release-manifests:
     kustomize build config/default > _out/addon-components.yaml
 
+# Install kopium
 [private]
-create-out-dir:
+_install-kopium:
+    cargo install kopium
+
+# Download yq
+[private]
+[linux]
+_download-yq:
+    curl -sSL https://github.com/mikefarah/yq/releases/download/{{YQ_VERSION}}/yq_linux_{{ARCH}} -o {{YQ_BIN}}
+    chmod +x {{YQ_BIN}}
+
+[private]
+[macos]
+_download-yq:
+    curl -sSL https://github.com/mikefarah/yq/releases/download/{{YQ_VERSION}}/yq_darwin_{{ARCH}} -o {{YQ_BIN}}
+    chmod +x {{YQ_BIN}}
+
+[private]
+_create-out-dir:
     mkdir -p _out
 
