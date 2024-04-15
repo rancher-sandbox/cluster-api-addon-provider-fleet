@@ -2,10 +2,25 @@ NAME := "cluster-api-fleet-controller"
 KUBE_VERSION := env_var_or_default('KUBE_VERSION', '1.26.3')
 ORG := "ghcr.io/rancher-sandbox"
 TAG := "dev"
+HOME_DIR := env_var('HOME')
 
 [private]
 default:
     @just --list --unsorted --color=always
+
+# Generates stuff
+generate:
+    just generate-crds
+
+# generates files for CRDS
+generate-crds: install-kopium
+    just _generate-kopium-url {{home_directory()}}/.cargo/bin/kopium "https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/main/config/crd/bases/cluster.x-k8s.io_clusters.yaml" "src/api/capi_cluster.rs"
+    just _generate-kopium-url {{home_directory()}}/.cargo/bin/kopium "https://raw.githubusercontent.com/rancher/fleet/main/charts/fleet-crd/templates/crds.yaml" "src/api/fleet_cluster.rs" "select(.spec.names.singular==\"cluster\")"
+    just _generate-kopium-url {{home_directory()}}/.cargo/bin/kopium "https://raw.githubusercontent.com/rancher/fleet/main/charts/fleet-crd/templates/crds.yaml" "src/api/fleet_clustergroup.rs" "select(.spec.names.singular==\"clustergroup\")"
+
+[private]
+_generate-kopium-url kpath="" source="" dest="" yqexp=".":
+    curl -sSL {{source}} | yq '{{yqexp}}' | {{kpath}} -D Default -f - > {{dest}}
 
 # run with opentelemetry
 run-telemetry:
@@ -97,6 +112,10 @@ undeploy:
 
 release-manifests:
     kustomize build config/default > _out/addon-components.yaml
+
+# Install kopium
+install-kopium:
+    cargo install kopium
 
 [private]
 create-out-dir:
