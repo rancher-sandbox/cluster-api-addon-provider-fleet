@@ -52,9 +52,15 @@ async fn reconcile(c: Arc<Cluster>, ctx: Arc<Context>) -> Result<Action> {
     let cluster_api: Api<Cluster> = Api::namespaced(ctx.client.clone(), ns);
     debug!("Reconciling Cluster \"{}\" in {}", cluster_name, ns);
     finalizer(&cluster_api, FLEET_FINALIZER, c, |event| async {
-        match event {
-            Finalizer::Apply(c) => c.reconcile(ctx.clone()).await,
+        let r = match event {
+            Finalizer::Apply(c) => c.to_bundle()?.sync_fleet_cluster(ctx).await,
             Finalizer::Cleanup(c) => c.cleanup(ctx.clone()).await,
+        };
+
+        match r {
+            Ok(r) => Ok(r),
+            Err(Error::EarlyReturn) => Ok(Action::await_change()),
+            Err(e) => Err(e),
         }
     })
     .await
@@ -76,25 +82,31 @@ impl From<&Cluster> for FleetClusterBundle {
     fn from(cluster: &Cluster) -> Self {
         Self {
             cluster: cluster.clone(),
-            fleet: fleet_cluster::Cluster {
-                metadata: ObjectMeta {
-                    labels: Some(cluster.labels().clone()),
-                    name: Some(cluster.name_any()),
-                    namespace: cluster.meta().namespace.clone(),
-                    ..Default::default()
-                },
-                spec: fleet_cluster::ClusterSpec {
-                    kube_config_secret: Some(format!("{}-kubeconfig", cluster.name_any())),
-                    ..Default::default()
-                },
-                status: Default::default(),
+            fleet: cluster.into(),
+        }
+    }
+}
+
+impl From<&Cluster> for fleet_cluster::Cluster {
+    fn from(cluster: &Cluster) -> Self {
+        Self {
+            metadata: ObjectMeta {
+                labels: Some(cluster.labels().clone()),
+                name: Some(cluster.name_any()),
+                namespace: cluster.meta().namespace.clone(),
+                ..Default::default()
             },
+            spec: fleet_cluster::ClusterSpec {
+                kube_config_secret: Some(format!("{}-kubeconfig", cluster.name_any())),
+                ..Default::default()
+            },
+            status: Default::default(),
         }
     }
 }
 
 impl FleetClusterBundle {
-    pub async fn reconcile_fleet_cluster(&self, ctx: Arc<Context>) -> Result<Action> {
+    pub async fn sync_fleet_cluster(&self, ctx: Arc<Context>) -> Result<Action> {
         let ns = self
             .cluster
             .metadata
@@ -104,13 +116,12 @@ impl FleetClusterBundle {
         let fleet_api: Api<fleet_cluster::Cluster> = Api::namespaced(ctx.client.clone(), ns);
 
         let fleet_cluster = match fleet_api.get(self.fleet.name_any().as_str()).await {
-            Ok(_) => return Ok(Action::await_change()),
+            Ok(_) => Err(Error::EarlyReturn),
             Err(kubeerror::Api(ErrorResponse { reason, .. })) if &reason == "NotFound" => {
                 Ok(self.fleet.clone())
             }
-            Err(err) => Err(err),
-        }
-        .map_err(Error::FleetClusterLookupError)?;
+            Err(err) => Err(err).map_err(Error::FleetClusterLookupError),
+        }?;
 
         let pp = PostParams::default();
         fleet_api
@@ -123,13 +134,11 @@ impl FleetClusterBundle {
 }
 
 impl Cluster {
-    async fn reconcile(&self, ctx: Arc<Context>) -> Result<Action> {
-        let cluster_bundle: FleetClusterBundle = match self.cluster_ready().map(Into::into) {
-            Some(b) => b,
-            None => return Ok(Action::await_change()),
-        };
-
-        cluster_bundle.reconcile_fleet_cluster(ctx).await
+    fn to_bundle(&self) -> Result<FleetClusterBundle> {
+        self
+            .cluster_ready()
+            .map(Into::into)
+            .ok_or(Error::EarlyReturn)
     }
 
     pub fn cluster_ready(&self) -> Option<&Self> {
