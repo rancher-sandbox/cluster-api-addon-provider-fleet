@@ -120,7 +120,7 @@ impl FleetClusterBundle {
             Err(kubeerror::Api(ErrorResponse { reason, .. })) if &reason == "NotFound" => {
                 Ok(self.fleet.clone())
             }
-            Err(err) => Err(err).map_err(Error::FleetClusterLookupError),
+            Err(err) => Err(Error::FleetClusterLookupError(err)),
         }?;
 
         let pp = PostParams::default();
@@ -135,8 +135,7 @@ impl FleetClusterBundle {
 
 impl Cluster {
     fn to_bundle(&self) -> Result<FleetClusterBundle> {
-        self
-            .cluster_ready()
+        self.cluster_ready()
             .map(Into::into)
             .ok_or(Error::EarlyReturn)
     }
