@@ -122,6 +122,11 @@ undeploy: _download-kustomize
 release-manifests: _download-kustomize
     {{KUSTOMIZE_BIN}} build config/default > _out/addon-components.yaml
 
+# Full e2e test of importing cluster in fleet
+test-import: start-dev deploy deploy-child-cluster deploy-crs
+    kubectl wait pods --for=condition=Ready --timeout=300s --all --all-namespaces
+    kubectl wait clusters.fleet.cattle.io --timeout=300s --for=condition=Imported docker-demo
+
 # Install kopium
 [private]
 _install-kopium:

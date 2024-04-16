@@ -1,26 +1,26 @@
-#![allow(unused_imports, dead_code)]
-use crate::api::capi_cluster::{Cluster, ClusterStatus};
+#![allow(dead_code)]
+use crate::api::capi_cluster::Cluster;
 use crate::api::fleet_cluster;
 use crate::{telemetry, Error, Metrics, Result};
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
 use kube::api::ObjectMeta;
-use kube::runtime::reflector::Lookup;
+
 use kube::{
-    api::{Api, ListParams, Patch, PatchParams, PostParams, ResourceExt},
+    api::{Api, ListParams, PostParams, ResourceExt},
     client::Client,
-    core::{object::HasStatus, ErrorResponse},
+    core::ErrorResponse,
     runtime::{
         controller::{Action, Controller},
-        events::{Event, EventType, Recorder, Reporter},
+        events::{Recorder, Reporter},
         finalizer::{finalizer, Event as Finalizer},
         watcher::Config,
     },
-    CustomResource, Error as kubeerror, Resource,
+    Error as kubeerror, Resource,
 };
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
+
+use serde::Serialize;
+
 use std::sync::Arc;
 use tokio::{sync::RwLock, time::Duration};
 use tracing::*;
@@ -94,6 +94,7 @@ impl From<&Cluster> for fleet_cluster::Cluster {
                 labels: Some(cluster.labels().clone()),
                 name: Some(cluster.name_any()),
                 namespace: cluster.meta().namespace.clone(),
+                owner_references: Some(cluster.controller_owner_ref(&()).into_iter().collect()),
                 ..Default::default()
             },
             spec: fleet_cluster::ClusterSpec {
@@ -228,7 +229,15 @@ pub async fn run(state: State) {
         //info!("Installation: cargo run --bin crdgen | kubectl apply -f -");
         std::process::exit(1);
     }
+    let fleet = Api::<fleet_cluster::Cluster>::all(client.clone());
+    if let Err(e) = fleet.list(&ListParams::default().limit(1)).await {
+        error!("Fleet Clusters are not queryable; {e:?}. Is the CRD installed?");
+        //info!("Installation: cargo run --bin crdgen | kubectl apply -f -");
+        std::process::exit(1);
+    }
+
     Controller::new(clusters, Config::default().any_semantic())
+        .owns(fleet, Config::default().any_semantic())
         .shutdown_on_signal()
         .run(reconcile, error_policy, state.to_context(client))
         .filter_map(|x| async move { std::result::Result::ok(x) })
