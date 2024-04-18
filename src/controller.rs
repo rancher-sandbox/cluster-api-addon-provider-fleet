@@ -1,26 +1,26 @@
-#![allow(unused_imports, dead_code)]
-use crate::api::capi_cluster::{Cluster, ClusterStatus};
+#![allow(dead_code)]
+use crate::api::capi_cluster::Cluster;
 use crate::api::fleet_cluster;
 use crate::{telemetry, Error, Metrics, Result};
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
 use kube::api::ObjectMeta;
-use kube::runtime::reflector::Lookup;
+
 use kube::{
-    api::{Api, ListParams, Patch, PatchParams, PostParams, ResourceExt},
+    api::{Api, ListParams, PostParams, ResourceExt},
     client::Client,
-    core::{object::HasStatus, ErrorResponse},
+    core::ErrorResponse,
     runtime::{
         controller::{Action, Controller},
-        events::{Event, EventType, Recorder, Reporter},
+        events::{Recorder, Reporter},
         finalizer::{finalizer, Event as Finalizer},
         watcher::Config,
     },
-    CustomResource, Error as kubeerror, Resource,
+    Error as kubeerror, Resource,
 };
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
+
+use serde::Serialize;
+
 use std::sync::Arc;
 use tokio::{sync::RwLock, time::Duration};
 use tracing::*;
@@ -52,9 +52,15 @@ async fn reconcile(c: Arc<Cluster>, ctx: Arc<Context>) -> Result<Action> {
     let cluster_api: Api<Cluster> = Api::namespaced(ctx.client.clone(), ns);
     debug!("Reconciling Cluster \"{}\" in {}", cluster_name, ns);
     finalizer(&cluster_api, FLEET_FINALIZER, c, |event| async {
-        match event {
-            Finalizer::Apply(c) => c.reconcile(ctx.clone()).await,
+        let r = match event {
+            Finalizer::Apply(c) => c.to_bundle()?.sync_fleet_cluster(ctx).await,
             Finalizer::Cleanup(c) => c.cleanup(ctx.clone()).await,
+        };
+
+        match r {
+            Ok(r) => Ok(r),
+            Err(Error::EarlyReturn) => Ok(Action::await_change()),
+            Err(e) => Err(e),
         }
     })
     .await
@@ -76,25 +82,32 @@ impl From<&Cluster> for FleetClusterBundle {
     fn from(cluster: &Cluster) -> Self {
         Self {
             cluster: cluster.clone(),
-            fleet: fleet_cluster::Cluster {
-                metadata: ObjectMeta {
-                    labels: Some(cluster.labels().clone()),
-                    name: Some(cluster.name_any()),
-                    namespace: cluster.meta().namespace.clone(),
-                    ..Default::default()
-                },
-                spec: fleet_cluster::ClusterSpec {
-                    kube_config_secret: Some(format!("{}-kubeconfig", cluster.name_any())),
-                    ..Default::default()
-                },
-                status: Default::default(),
+            fleet: cluster.into(),
+        }
+    }
+}
+
+impl From<&Cluster> for fleet_cluster::Cluster {
+    fn from(cluster: &Cluster) -> Self {
+        Self {
+            metadata: ObjectMeta {
+                labels: Some(cluster.labels().clone()),
+                name: Some(cluster.name_any()),
+                namespace: cluster.meta().namespace.clone(),
+                owner_references: Some(cluster.controller_owner_ref(&()).into_iter().collect()),
+                ..Default::default()
             },
+            spec: fleet_cluster::ClusterSpec {
+                kube_config_secret: Some(format!("{}-kubeconfig", cluster.name_any())),
+                ..Default::default()
+            },
+            status: Default::default(),
         }
     }
 }
 
 impl FleetClusterBundle {
-    pub async fn reconcile_fleet_cluster(&self, ctx: Arc<Context>) -> Result<Action> {
+    pub async fn sync_fleet_cluster(&self, ctx: Arc<Context>) -> Result<Action> {
         let ns = self
             .cluster
             .metadata
@@ -104,13 +117,12 @@ impl FleetClusterBundle {
         let fleet_api: Api<fleet_cluster::Cluster> = Api::namespaced(ctx.client.clone(), ns);
 
         let fleet_cluster = match fleet_api.get(self.fleet.name_any().as_str()).await {
-            Ok(_) => return Ok(Action::await_change()),
+            Ok(_) => Err(Error::EarlyReturn),
             Err(kubeerror::Api(ErrorResponse { reason, .. })) if &reason == "NotFound" => {
                 Ok(self.fleet.clone())
             }
-            Err(err) => Err(err),
-        }
-        .map_err(Error::FleetClusterLookupError)?;
+            Err(err) => Err(Error::FleetClusterLookupError(err)),
+        }?;
 
         let pp = PostParams::default();
         fleet_api
@@ -123,13 +135,10 @@ impl FleetClusterBundle {
 }
 
 impl Cluster {
-    async fn reconcile(&self, ctx: Arc<Context>) -> Result<Action> {
-        let cluster_bundle: FleetClusterBundle = match self.cluster_ready().map(Into::into) {
-            Some(b) => b,
-            None => return Ok(Action::await_change()),
-        };
-
-        cluster_bundle.reconcile_fleet_cluster(ctx).await
+    fn to_bundle(&self) -> Result<FleetClusterBundle> {
+        self.cluster_ready()
+            .map(Into::into)
+            .ok_or(Error::EarlyReturn)
     }
 
     pub fn cluster_ready(&self) -> Option<&Self> {
@@ -220,7 +229,15 @@ pub async fn run(state: State) {
         //info!("Installation: cargo run --bin crdgen | kubectl apply -f -");
         std::process::exit(1);
     }
+    let fleet = Api::<fleet_cluster::Cluster>::all(client.clone());
+    if let Err(e) = fleet.list(&ListParams::default().limit(1)).await {
+        error!("Fleet Clusters are not queryable; {e:?}. Is the CRD installed?");
+        //info!("Installation: cargo run --bin crdgen | kubectl apply -f -");
+        std::process::exit(1);
+    }
+
     Controller::new(clusters, Config::default().any_semantic())
+        .owns(fleet, Config::default().any_semantic())
         .shutdown_on_signal()
         .run(reconcile, error_policy, state.to_context(client))
         .filter_map(|x| async move { std::result::Result::ok(x) })

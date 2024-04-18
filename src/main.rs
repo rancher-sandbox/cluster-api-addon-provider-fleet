@@ -41,7 +41,7 @@ async fn main() -> anyhow::Result<()> {
             .service(health)
             .service(metrics)
     })
-    .bind("0.0.0.0:8080")?
+    .bind("0.0.0.0:8443")?
     .shutdown_timeout(5);
 
     tokio::join!(controller, server.run()).1?;

@@ -24,6 +24,9 @@ pub enum Error {
 
     #[error("IllegalDocument")]
     IllegalDocument,
+
+    #[error("Return early")]
+    EarlyReturn,
 }
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 

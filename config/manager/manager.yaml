@@ -33,24 +33,15 @@ spec:
           # securityContext:
           #   allowPrivilegeEscalation: false
           ports:
-            - containerPort: 9440
-              name: healthz
-              protocol: TCP
             - containerPort: 8443
-              name: metrics
+              name: http
               protocol: TCP
           readinessProbe:
             httpGet:
-              path: /readyz
-              port: healthz
-            initialDelaySeconds: 10
-            periodSeconds: 10
-          livenessProbe:
-            httpGet:
-              path: /healthz
-              port: healthz
-            initialDelaySeconds: 10
-            periodSeconds: 10
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
           # TODO(user): Configure the resources accordingly based on the project requirements.
           # More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
           # resources:
