@@ -65,6 +65,10 @@ build-base: (_build "")
 # docker build with telemetry
 build-otel: (_build "telemetry")
 
+# Push the docker images
+docker-push:
+    docker push {{ORG}}/{{NAME}}:{{TAG}}
+
 load-base: build-base
     kind load docker-image {{ORG}}/{{NAME}}:{{TAG}} --name dev
 
