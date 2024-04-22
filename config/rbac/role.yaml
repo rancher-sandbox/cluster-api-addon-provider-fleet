@@ -5,6 +5,12 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - addons.cluster.x-k8s.io
+  resources:
+  - fleetaddonconfigs
+  verbs:
+  - "*"
+- apiGroups:
   - ""
   resources:
   - namespaces

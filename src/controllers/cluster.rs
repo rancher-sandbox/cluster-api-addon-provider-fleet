@@ -1,5 +1,6 @@
 use crate::api::capi_cluster::{Cluster, ClusterTopology};
 
+use crate::api::fleet_addon_config::FleetAddonConfig;
 use crate::api::fleet_cluster;
 
 use crate::Result;
@@ -76,7 +77,14 @@ impl FleetBundle for FleetClusterBundle {
 impl FleetController for Cluster {
     type Bundle = FleetClusterBundle;
 
-    fn to_bundle(&self) -> Result<&Self> {
+    fn to_bundle(&self, config: &FleetAddonConfig) -> Result<&Self> {
+        config
+            .spec
+            .cluster
+            .iter()
+            .filter_map(|c| c.enabled)
+            .find(|&enabled| enabled)
+            .ok_or(SyncError::EarlyReturn)?;
         self.cluster_ready().ok_or(SyncError::EarlyReturn.into())
     }
 }

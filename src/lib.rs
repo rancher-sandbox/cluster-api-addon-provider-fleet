@@ -6,6 +6,9 @@ pub enum Error {
     #[error("Kube Error: {0}")]
     KubeError(#[from] kube::Error),
 
+    #[error("Config fetch error: {0}")]
+    ConfigFetch(#[source] kube::Error),
+
     #[error("Fleet error: {0}")]
     FleetError(#[from] SyncError),
 

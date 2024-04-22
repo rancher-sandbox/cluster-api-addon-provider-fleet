@@ -1,3 +1,4 @@
+use crate::api::fleet_addon_config::FleetAddonConfig;
 use crate::metrics::Diagnostics;
 use crate::{telemetry, Error, Metrics};
 use chrono::Utc;
@@ -8,6 +9,7 @@ use kube::api::PostParams;
 
 use kube::runtime::events::{Event, EventType};
 use kube::runtime::finalizer;
+
 use kube::{api::Api, client::Client, runtime::controller::Action};
 
 use serde::de::DeserializeOwned;
@@ -101,12 +103,19 @@ where
         let namespace = self.namespace().unwrap_or_default();
         ctx.diagnostics.write().await.last_event = Utc::now();
 
+        let config_api: Api<FleetAddonConfig> = Api::all(ctx.client.clone());
+        let config = config_api
+            .get_opt("fleet-addon-config")
+            .await
+            .map_err(Error::ConfigFetch)?
+            .unwrap_or_default();
+
         let cluster_api: Api<Self> = Api::namespaced(ctx.client.clone(), namespace.as_str());
         debug!("Reconciling \"{}\" in {}", name, namespace);
 
         finalizer(&cluster_api, FLEET_FINALIZER, self, |event| async {
             let r = match event {
-                finalizer::Event::Apply(c) => c.to_bundle()?.into().sync(ctx).await,
+                finalizer::Event::Apply(c) => c.to_bundle(&config)?.into().sync(ctx).await,
                 finalizer::Event::Cleanup(c) => c.cleanup(ctx).await,
             };
 
@@ -138,7 +147,5 @@ where
         Ok(Action::await_change())
     }
 
-    fn to_bundle(&self) -> crate::Result<impl Into<Self::Bundle>> {
-        Ok(self)
-    }
+    fn to_bundle(&self, config: &FleetAddonConfig) -> crate::Result<impl Into<Self::Bundle>>;
 }

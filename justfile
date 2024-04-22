@@ -16,6 +16,7 @@ default:
 
 # Generates stuff
 generate:
+    just generate-addon-crds
     just generate-crds
 
 # generates files for CRDS
@@ -28,6 +29,9 @@ generate-crds: _create-out-dir _install-kopium _download-yq
 [private]
 _generate-kopium-url kpath="" source="" dest="" yqexp="." condition="":
     curl -sSL {{source}} | {{YQ_BIN}} '{{yqexp}}' | {{kpath}} -D Default {{condition}} -f - > {{dest}}
+
+generate-addon-crds:
+    cargo run --bin crdgen > config/crds/fleet-addon-config.yaml
 
 # run with opentelemetry
 run-telemetry:

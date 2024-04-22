@@ -1,0 +1,55 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: fleetaddonconfigs.addons.cluster.x-k8s.io
+spec:
+  group: addons.cluster.x-k8s.io
+  names:
+    categories: []
+    kind: FleetAddonConfig
+    plural: fleetaddonconfigs
+    shortNames: []
+    singular: fleetaddonconfig
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns: []
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Auto-generated derived type for FleetAddonConfigSpec via `CustomResource`
+        properties:
+          spec:
+            description: This provides a config for fleet addon functionality
+            properties:
+              cluster:
+                description: Cluster controller settings
+                nullable: true
+                properties:
+                  enabled:
+                    description: |-
+                      Enable Cluster config funtionality.
+
+                      This will create Fleet Cluster for each Cluster with the same name. In case the cluster specifies topology.class, the name of the ClusterClass will be added to the Fleet Cluster labels.
+                    nullable: true
+                    type: boolean
+                type: object
+              cluster_class:
+                description: Cluster class controller settings
+                nullable: true
+                properties:
+                  enabled:
+                    description: |-
+                      Enable clusterClass controller functionality.
+
+                      This will create Fleet ClusterGroups for each ClusterClaster with the same name.
+                    nullable: true
+                    type: boolean
+                type: object
+            type: object
+        required:
+        - spec
+        title: FleetAddonConfig
+        type: object
+    served: true
+    storage: true
+    subresources: {}

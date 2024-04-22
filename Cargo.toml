@@ -58,3 +58,8 @@ tower-test = "0.4.0"
 [dependencies.kube]
 features = ["runtime", "client", "derive"]
 version = "0.90.0"
+
+[[bin]]
+doc = false
+name = "crdgen"
+path = "src/crdgen.rs"
