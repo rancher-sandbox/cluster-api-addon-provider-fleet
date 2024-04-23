@@ -1,0 +1,24 @@
+name: Run CI checks
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install just
+        uses: extractions/setup-just@v2
+      - uses: actions/checkout@v4
+      - name: Build
+        run: just compile
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install just
+        uses: extractions/setup-just@v2
+      - uses: actions/checkout@v4
+      - name: Test
+        run: just test-unit
