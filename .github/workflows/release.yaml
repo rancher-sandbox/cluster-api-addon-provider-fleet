@@ -17,7 +17,9 @@ jobs:
       packages: write
     steps:
       - name: Install just
-        run: curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to .
+        run: |
+          mkdir -p _out
+          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to _out
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -29,9 +31,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build docker image
-        run: just TAG=${{ env.TAG }} build-base
+        run: _out/just TAG=${{ env.TAG }} build-base
       - name: Push docker image
-        run: just TAG=${{ env.TAG }} docker-push
+        run: _out/just TAG=${{ env.TAG }} docker-push
   release:
     runs-on: ubuntu-latest
     permissions:
@@ -39,7 +41,9 @@ jobs:
     needs: [build]
     steps:
       - name: Install just
-        run: curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to .
+        run: |
+          mkdir -p _out
+          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to _out
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -48,7 +52,7 @@ jobs:
         run: |
           # this is quite naive, but i don't think we need more for now
           sed -i "s/dev/${TAG}/g" config/default/manager_image_patch.yaml
-          just release-manifests
+          _out/just release-manifests
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
