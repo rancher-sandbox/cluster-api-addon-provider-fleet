@@ -128,7 +128,7 @@ deploy: _download-kustomize load-base
 undeploy: _download-kustomize
     {{KUSTOMIZE_BIN}} build config/default | kubectl delete --ignore-not-found=true -f -
 
-release-manifests: _download-kustomize
+release-manifests: _create-out-dir _download-kustomize
     {{KUSTOMIZE_BIN}} build config/default > _out/addon-components.yaml
 
 # Full e2e test of importing cluster in fleet
