@@ -17,7 +17,7 @@ jobs:
       packages: write
     steps:
       - name: Install just
-        run: sudo snap install --edge --classic just
+        run: curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to .
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -39,7 +39,7 @@ jobs:
     needs: [build]
     steps:
       - name: Install just
-        run: sudo snap install --edge --classic just
+        run: curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to .
       - name: Checkout
         uses: actions/checkout@v4
         with:
