@@ -50,7 +50,7 @@ test-unit:
   cargo test
 
 # compile for musl (for docker image)
-compile features="":
+compile features="":  _create-out-dir
   #!/usr/bin/env bash
   docker run --rm \
     -v cargo-cache:/root/.cargo \
