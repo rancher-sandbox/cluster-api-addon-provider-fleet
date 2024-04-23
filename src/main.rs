@@ -29,8 +29,9 @@ async fn main() -> anyhow::Result<()> {
     telemetry::init().await;
 
     // Init k8s controller state
-    let state = State::default();
-    let controller = controller::run(state.clone());
+    let state = State::new();
+    let cluster_controller = controller::run_cluster_controller(state.clone());
+    let cluster_class_controller = controller::run_cluster_class_controller(state.clone());
 
     // Start web server
     let server = HttpServer::new(move || {
@@ -42,8 +43,9 @@ async fn main() -> anyhow::Result<()> {
             .service(metrics)
     })
     .bind("0.0.0.0:8443")?
-    .shutdown_timeout(5);
+    .shutdown_timeout(5)
+    .run();
 
-    tokio::join!(controller, server.run()).1?;
+    tokio::join!(cluster_controller, cluster_class_controller, server).2?;
     Ok(())
 }

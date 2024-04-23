@@ -8,6 +8,7 @@ commonLabels:
 bases:
 - ../rbac
 - ../manager
+- ../crds
 
 patchesStrategicMerge:
 # Provide customizable hook for make targets.

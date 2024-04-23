@@ -5,11 +5,23 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - addons.cluster.x-k8s.io
+  resources:
+  - fleetaddonconfigs
+  verbs:
+  - "*"
+- apiGroups:
   - ""
   resources:
   - namespaces
   verbs:
   - list
+- apiGroups:
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
 - apiGroups:
   - ""
   resources:
@@ -52,34 +64,19 @@ rules:
   - cluster.x-k8s.io
   resources:
   - clusters
+  - clusterclasses
   verbs:
   - get
   - list
   - watch
   - patch
 - apiGroups:
-  - cluster.x-k8s.io
-  resources:
-  - secrets
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - controlplane.cluster.x-k8s.io
-  resources:
-  - kubeadmcontrolplanes
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
   - fleet.cattle.io
   resources:
   - clusters
+  - clustergroups
   verbs:
   - create
-  - delete
   - get
   - list
   - patch

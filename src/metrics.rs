@@ -1,7 +1,11 @@
-use crate::api::capi_cluster::Cluster;
+use std::sync::Arc;
+
+
 use crate::Error;
-use kube::ResourceExt;
+use chrono::{DateTime, Utc};
+use kube::{runtime::events::{Recorder, Reporter}, Client, Resource, ResourceExt};
 use prometheus::{histogram_opts, opts, HistogramVec, IntCounter, IntCounterVec, Registry};
+use serde::Serialize;
 use tokio::time::Instant;
 
 #[derive(Clone)]
@@ -49,9 +53,9 @@ impl Metrics {
         Ok(self)
     }
 
-    pub fn reconcile_failure(&self, cluster: &Cluster, e: &Error) {
+    pub fn reconcile_failure<C: kube::Resource>(&self, obj: Arc<C>, e: &Error) {
         self.failures
-            .with_label_values(&[cluster.name_any().as_ref(), e.metric_label().as_ref()])
+            .with_label_values(&[obj.name_any().as_ref(), e.metric_label().as_ref()])
             .inc()
     }
 
@@ -61,6 +65,30 @@ impl Metrics {
             start: Instant::now(),
             metric: self.reconcile_duration.clone(),
         }
+    }
+}
+
+/// Diagnostics to be exposed by the web server
+#[derive(Clone, Serialize)]
+pub struct Diagnostics {
+    #[serde(deserialize_with = "from_ts")]
+    pub last_event: DateTime<Utc>,
+    #[serde(skip)]
+    pub reporter: Reporter,
+}
+
+impl Default for Diagnostics {
+    fn default() -> Self {
+        Self {
+            last_event: Utc::now(),
+            reporter: "doc-controller".into(),
+        }
+    }
+}
+
+impl Diagnostics {
+    pub fn recorder<R: Resource<DynamicType = ()>>(&self, client: Client, cluster: &R) -> Recorder {
+        Recorder::new(client, self.reporter.clone(), cluster.object_ref(&()))
     }
 }
 
