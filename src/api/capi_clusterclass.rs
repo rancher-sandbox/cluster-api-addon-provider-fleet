@@ -2,11 +2,15 @@
 // kopium command: kopium -D Default -f -
 // kopium version: 0.18.0
 
-use kube::CustomResource;
-use serde::{Serialize, Deserialize};
-use std::collections::BTreeMap;
-use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
+#[allow(unused_imports)]
+mod prelude {
+    pub use kube::CustomResource;
+    pub use serde::{Serialize, Deserialize};
+    pub use std::collections::BTreeMap;
+    pub use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
+    pub use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
+}
+use self::prelude::*;
 
 #[derive(CustomResource, Serialize, Deserialize, Clone, Debug, Default)]
 #[kube(group = "cluster.x-k8s.io", version = "v1beta1", kind = "ClusterClass", plural = "clusterclasses")]
@@ -191,7 +195,7 @@ pub struct ClusterClassPatchesDefinitionsJsonPatches {
     pub op: String,
     pub path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub value: Option<BTreeMap<String, serde_json::Value>>,
+    pub value: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "valueFrom")]
     pub value_from: Option<ClusterClassPatchesDefinitionsJsonPatchesValueFrom>,
 }
@@ -275,15 +279,15 @@ pub struct ClusterClassVariablesSchema {
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct ClusterClassVariablesSchemaOpenApiv3Schema {
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "additionalProperties")]
-    pub additional_properties: Option<BTreeMap<String, serde_json::Value>>,
+    pub additional_properties: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub default: Option<BTreeMap<String, serde_json::Value>>,
+    pub default: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "enum")]
     pub r#enum: Option<Vec<BTreeMap<String, serde_json::Value>>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub example: Option<BTreeMap<String, serde_json::Value>>,
+    pub example: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "exclusiveMaximum")]
     pub exclusive_maximum: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "exclusiveMinimum")]
@@ -291,7 +295,7 @@ pub struct ClusterClassVariablesSchemaOpenApiv3Schema {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub format: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub items: Option<BTreeMap<String, serde_json::Value>>,
+    pub items: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "maxItems")]
     pub max_items: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "maxLength")]
@@ -307,7 +311,7 @@ pub struct ClusterClassVariablesSchemaOpenApiv3Schema {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pattern: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub properties: Option<BTreeMap<String, serde_json::Value>>,
+    pub properties: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub required: Option<Vec<String>>,
     #[serde(rename = "type")]
@@ -621,15 +625,15 @@ pub struct ClusterClassStatusVariablesDefinitionsSchema {
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct ClusterClassStatusVariablesDefinitionsSchemaOpenApiv3Schema {
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "additionalProperties")]
-    pub additional_properties: Option<BTreeMap<String, serde_json::Value>>,
+    pub additional_properties: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub default: Option<BTreeMap<String, serde_json::Value>>,
+    pub default: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "enum")]
     pub r#enum: Option<Vec<BTreeMap<String, serde_json::Value>>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub example: Option<BTreeMap<String, serde_json::Value>>,
+    pub example: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "exclusiveMaximum")]
     pub exclusive_maximum: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "exclusiveMinimum")]
@@ -637,7 +641,7 @@ pub struct ClusterClassStatusVariablesDefinitionsSchemaOpenApiv3Schema {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub format: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub items: Option<BTreeMap<String, serde_json::Value>>,
+    pub items: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "maxItems")]
     pub max_items: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "maxLength")]
@@ -653,7 +657,7 @@ pub struct ClusterClassStatusVariablesDefinitionsSchemaOpenApiv3Schema {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pattern: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub properties: Option<BTreeMap<String, serde_json::Value>>,
+    pub properties: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub required: Option<Vec<String>>,
     #[serde(rename = "type")]

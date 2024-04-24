@@ -2,9 +2,13 @@
 // kopium command: kopium -D Default --no-condition -f -
 // kopium version: 0.18.0
 
-use kube::CustomResource;
-use serde::{Serialize, Deserialize};
-use std::collections::BTreeMap;
+#[allow(unused_imports)]
+mod prelude {
+    pub use kube::CustomResource;
+    pub use serde::{Serialize, Deserialize};
+    pub use std::collections::BTreeMap;
+}
+use self::prelude::*;
 
 #[derive(CustomResource, Serialize, Deserialize, Clone, Debug, Default)]
 #[kube(group = "fleet.cattle.io", version = "v1alpha1", kind = "ClusterGroup", plural = "clustergroups")]

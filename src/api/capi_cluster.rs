@@ -2,11 +2,15 @@
 // kopium command: kopium -D Default -f -
 // kopium version: 0.18.0
 
-use kube::CustomResource;
-use serde::{Serialize, Deserialize};
-use std::collections::BTreeMap;
-use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
+#[allow(unused_imports)]
+mod prelude {
+    pub use kube::CustomResource;
+    pub use serde::{Serialize, Deserialize};
+    pub use std::collections::BTreeMap;
+    pub use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
+    pub use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
+}
+use self::prelude::*;
 
 #[derive(CustomResource, Serialize, Deserialize, Clone, Debug, Default)]
 #[kube(group = "cluster.x-k8s.io", version = "v1beta1", kind = "Cluster", plural = "clusters")]
@@ -179,7 +183,7 @@ pub struct ClusterTopologyVariables {
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "definitionFrom")]
     pub definition_from: Option<String>,
     pub name: String,
-    pub value: BTreeMap<String, serde_json::Value>,
+    pub value: serde_json::Value,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -308,7 +312,7 @@ pub struct ClusterTopologyWorkersMachineDeploymentsVariablesOverrides {
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "definitionFrom")]
     pub definition_from: Option<String>,
     pub name: String,
-    pub value: BTreeMap<String, serde_json::Value>,
+    pub value: serde_json::Value,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -352,7 +356,7 @@ pub struct ClusterTopologyWorkersMachinePoolsVariablesOverrides {
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "definitionFrom")]
     pub definition_from: Option<String>,
     pub name: String,
-    pub value: BTreeMap<String, serde_json::Value>,
+    pub value: serde_json::Value,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
