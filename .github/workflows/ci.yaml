@@ -22,3 +22,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: Test
         run: just test-unit
+  test-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install just
+        uses: extractions/setup-just@v2
+      - name: Install kind
+        uses: helm/kind-action@v1
+        with:
+          install_only: true
+      - uses: actions/checkout@v4
+      - name: Test
+        run: just test-cluster-class-import
