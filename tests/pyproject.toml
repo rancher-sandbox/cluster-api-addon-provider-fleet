@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "caapf-e2e"
+version = "0.1.0"
+description = "Cluster API Addon Provider Fleet e2e tests"
+authors = ["Richard Case <richard.case@suse.com>"]
+license = "Apache 2.0"
+readme = "README.md"
+packages = [{ include = "caapf_e2e" }]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+kubernetes = "^29.0.0"
+pyyaml = "^6.0.1"
+faker = "^24.11.0"
+pytest = "^8.1.1"
+pytest-timeout = "^2.3.1"
+pylint = "^3.1.0"
+
+[tool.poetry.group.dev.dependencies]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

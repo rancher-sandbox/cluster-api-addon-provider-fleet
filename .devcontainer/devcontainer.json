@@ -1,17 +1,20 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 // README at: https://github.com/devcontainers/templates/tree/main/src/rust
 {
-	"name": "Rust",
+	"name": "caapf-dev",
 	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
 	"image": "mcr.microsoft.com/devcontainers/rust:1-1-bullseye",
+	// Features to add to the dev container. More info: https://containers.dev/features.
 	"features": {
 		"ghcr.io/devcontainers/features/docker-in-docker:2": {},
 		"ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {},
 		"ghcr.io/devcontainers-contrib/features/kind:1": {},
 		"ghcr.io/rio/features/k9s:1": {},
 		"ghcr.io/guiyomh/features/just:0": {},
-		"ghcr.io/lentzi90/features/clusterctl:0": {}
-	}
+		"ghcr.io/lentzi90/features/clusterctl:0": {},
+		"ghcr.io/devcontainers/features/python:1": {},
+		"ghcr.io/devcontainers/features/node:1": {}
+	},
 	// Use 'mounts' to make the cargo cache persistent in a Docker Volume.
 	// "mounts": [
 	// 	{
@@ -20,14 +23,34 @@
 	// 		"type": "volume"
 	// 	}
 	// ]
-	// Features to add to the dev container. More info: https://containers.dev/features.
-	// "features": {},
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	// "forwardPorts": [],
 	// Use 'postCreateCommand' to run commands after the container is created.
-	// "postCreateCommand": "rustc --version",
+	"postCreateCommand": "bash ./.devcontainer/post-install.sh",
 	// Configure tool-specific properties.
-	// "customizations": {},
+	// "customizations": {
+	// 	"vscode": {
+	// 		// Set *default* container specific settings.json values on container create.
+	// 		"settings": {
+	// 			"python.defaultInterpreterPath": "/usr/local/bin/python"
+	// 		}
+	// 	}
+	// }
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"editor.formatOnSave": true,
+				"python.testing.pytestEnabled": true,
+				"python.testing.unittestEnabled": false,
+				"python.defaultInterpreterPath": ".venv/bin/python",
+				"python.terminal.activateEnvInCurrentTerminal": true
+			},
+			"extensions": [
+				"ms-python.python",
+				"ms-python.pylint"
+			]
+		}
+	}
 	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
 	// "remoteUser": "root"
 }
