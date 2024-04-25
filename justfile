@@ -4,9 +4,13 @@ ORG := "ghcr.io/rancher-sandbox"
 TAG := "dev"
 HOME_DIR := env_var('HOME')
 YQ_VERSION := "v4.43.1"
+CLUSTERCTL_VERSION := "v1.7.1"
 YQ_BIN := "_out/yq"
+OUT_DIR := "_out"
+KOPIUM_BIN := "_out/bin/kopium"
 KUSTOMIZE_VERSION := "v5.4.1"
 KUSTOMIZE_BIN := "_out/kustomize"
+CLUSTERCTL_BIN := "_out/clusterctl"
 ARCH := if arch() == "aarch64" { "arm64"} else { "amd64" }
 DIST := os()
 
@@ -21,10 +25,10 @@ generate:
 
 # generates files for CRDS
 generate-crds: _create-out-dir _install-kopium _download-yq
-    just _generate-kopium-url {{home_directory()}}/.cargo/bin/kopium "https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/main/config/crd/bases/cluster.x-k8s.io_clusters.yaml" "src/api/capi_cluster.rs" ""
-    just _generate-kopium-url {{home_directory()}}/.cargo/bin/kopium "https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/main/config/crd/bases/cluster.x-k8s.io_clusterclasses.yaml" "src/api/capi_clusterclass.rs" ""
-    just _generate-kopium-url {{home_directory()}}/.cargo/bin/kopium "https://raw.githubusercontent.com/rancher/fleet/main/charts/fleet-crd/templates/crds.yaml" "src/api/fleet_cluster.rs" "select(.spec.names.singular==\"cluster\")" "--no-condition"
-    just _generate-kopium-url {{home_directory()}}/.cargo/bin/kopium "https://raw.githubusercontent.com/rancher/fleet/main/charts/fleet-crd/templates/crds.yaml" "src/api/fleet_clustergroup.rs" "select(.spec.names.singular==\"clustergroup\")" "--no-condition"
+    just _generate-kopium-url {{KOPIUM_BIN}} "https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/main/config/crd/bases/cluster.x-k8s.io_clusters.yaml" "src/api/capi_cluster.rs" ""
+    just _generate-kopium-url {{KOPIUM_BIN}} "https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/main/config/crd/bases/cluster.x-k8s.io_clusterclasses.yaml" "src/api/capi_clusterclass.rs" ""
+    just _generate-kopium-url {{KOPIUM_BIN}} "https://raw.githubusercontent.com/rancher/fleet/main/charts/fleet-crd/templates/crds.yaml" "src/api/fleet_cluster.rs" "select(.spec.names.singular==\"cluster\")" "--no-condition"
+    just _generate-kopium-url {{KOPIUM_BIN}} "https://raw.githubusercontent.com/rancher/fleet/main/charts/fleet-crd/templates/crds.yaml" "src/api/fleet_clustergroup.rs" "select(.spec.names.singular==\"clustergroup\")" "--no-condition"
 
 [private]
 _generate-kopium-url kpath="" source="" dest="" yqexp="." condition="":
@@ -95,9 +99,13 @@ stop-dev:
 deploy-crs:
     kubectl --context kind-dev apply -f testdata/crs.yaml
 
-# Deploy child cluster using docker & kubead,
+# Deploy child cluster using docker & kubeadm
 deploy-child-cluster:
     kubectl --context kind-dev apply -f testdata/cluster_docker_kcp.yaml
+
+# Deploy child cluster-call based cluster using docker & kubeadm
+deploy-child-cluster-class:
+    kubectl --context kind-dev apply -f testdata/capi-quickstart.yaml
 
 # Add and update helm repos used
 update-helm-repos:
@@ -118,8 +126,8 @@ install-fleet: _create-out-dir
     helm install --create-namespace -n cattle-fleet-system --set apiServerURL=$API_SERVER_URL --set-file apiServerCA=_out/ca.pem fleet fleet/fleet --wait
 
 # Install cluster api and any providers
-install-capi:
-    EXP_CLUSTER_RESOURCE_SET=true CLUSTER_TOPOLOGY=true clusterctl init -i docker
+install-capi: _download-clusterctl
+    EXP_CLUSTER_RESOURCE_SET=true CLUSTER_TOPOLOGY=true {{CLUSTERCTL_BIN}} init -i docker
 
 # Deploy will deploy the operator
 deploy: _download-kustomize load-base
@@ -136,10 +144,16 @@ test-import: start-dev deploy deploy-child-cluster deploy-crs
     kubectl wait pods --for=condition=Ready --timeout=300s --all --all-namespaces
     kubectl wait clusters.fleet.cattle.io --timeout=300s --for=condition=Imported docker-demo
 
+# Full e2e test of importing cluster in fleet
+test-cluster-class-import: start-dev deploy deploy-child-cluster-class deploy-crs
+    kubectl wait pods --for=condition=Ready --timeout=300s --all --all-namespaces
+    kubectl wait clustergroups.fleet.cattle.io --timeout=300s --for=jsonpath='{.status.clusterCount}=1' quick-start
+    kubectl wait clusters.fleet.cattle.io --timeout=300s --for=condition=Imported capi-quickstart
+
 # Install kopium
 [private]
 _install-kopium:
-    cargo install kopium
+    cargo install --git https://github.com/kube-rs/kopium.git --branch main --root {{OUT_DIR}}
 
 # Download kustomize
 [private]
@@ -149,6 +163,18 @@ _download-kustomize:
     curl -sSL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/{{KUSTOMIZE_VERSION}}/kustomize_{{KUSTOMIZE_VERSION}}_{{DIST}}_{{ARCH}}.tar.gz -o {{KUSTOMIZE_BIN}}.tar.gz
     tar -xzf {{KUSTOMIZE_BIN}}.tar.gz -C _out
     chmod +x {{KUSTOMIZE_BIN}}
+
+[private]
+[linux]
+_download-clusterctl:
+    curl -L https://github.com/kubernetes-sigs/cluster-api/releases/download/{{CLUSTERCTL_VERSION}}/clusterctl-linux-amd64 -o {{CLUSTERCTL_BIN}}
+    chmod +x {{CLUSTERCTL_BIN}}
+
+[private]
+[macos]
+_download-clusterctl:
+    curl -L https://github.com/kubernetes-sigs/cluster-api/releases/download/{{CLUSTERCTL_VERSION}}/clusterctl-darwin-amd64 -o {{CLUSTERCTL_BIN}}
+    chmod +x {{CLUSTERCTL_BIN}}
 
 # Download yq
 [private]
