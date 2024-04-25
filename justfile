@@ -9,6 +9,7 @@ KUSTOMIZE_VERSION := "v5.4.1"
 KUSTOMIZE_BIN := "_out/kustomize"
 ARCH := if arch() == "aarch64" { "arm64"} else { "amd64" }
 DIST := os()
+CARGO_HOME := env_var('CARGO_HOME')
 
 [private]
 default:
@@ -21,10 +22,10 @@ generate:
 
 # generates files for CRDS
 generate-crds: _create-out-dir _install-kopium _download-yq
-    just _generate-kopium-url {{home_directory()}}/.cargo/bin/kopium "https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/main/config/crd/bases/cluster.x-k8s.io_clusters.yaml" "src/api/capi_cluster.rs" ""
-    just _generate-kopium-url {{home_directory()}}/.cargo/bin/kopium "https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/main/config/crd/bases/cluster.x-k8s.io_clusterclasses.yaml" "src/api/capi_clusterclass.rs" ""
-    just _generate-kopium-url {{home_directory()}}/.cargo/bin/kopium "https://raw.githubusercontent.com/rancher/fleet/main/charts/fleet-crd/templates/crds.yaml" "src/api/fleet_cluster.rs" "select(.spec.names.singular==\"cluster\")" "--no-condition"
-    just _generate-kopium-url {{home_directory()}}/.cargo/bin/kopium "https://raw.githubusercontent.com/rancher/fleet/main/charts/fleet-crd/templates/crds.yaml" "src/api/fleet_clustergroup.rs" "select(.spec.names.singular==\"clustergroup\")" "--no-condition"
+    just _generate-kopium-url {{CARGO_HOME}}/bin/kopium "https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/main/config/crd/bases/cluster.x-k8s.io_clusters.yaml" "src/api/capi_cluster.rs" ""
+    just _generate-kopium-url {{CARGO_HOME}}/bin/kopium "https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/main/config/crd/bases/cluster.x-k8s.io_clusterclasses.yaml" "src/api/capi_clusterclass.rs" ""
+    just _generate-kopium-url {{CARGO_HOME}}/bin/kopium "https://raw.githubusercontent.com/rancher/fleet/main/charts/fleet-crd/templates/crds.yaml" "src/api/fleet_cluster.rs" "select(.spec.names.singular==\"cluster\")" "--no-condition"
+    just _generate-kopium-url {{CARGO_HOME}}/bin/kopium "https://raw.githubusercontent.com/rancher/fleet/main/charts/fleet-crd/templates/crds.yaml" "src/api/fleet_clustergroup.rs" "select(.spec.names.singular==\"clustergroup\")" "--no-condition"
 
 [private]
 _generate-kopium-url kpath="" source="" dest="" yqexp="." condition="":
@@ -43,11 +44,15 @@ run:
 
 # format with nightly rustfmt
 fmt:
-    cargo +nightly fmt
+    cargo +nightly fmt --all
 
-# run unit tests
-test-unit:
-  cargo test
+# Run e2e tests
+test-e2e:
+    cd tests; poetry run pytest e2e/
+
+# Run tests for styling
+test-style:
+    cd tests; poetry run pytest --fmt-config={{justfile_directory()}}/rustfmt.toml style/ 
 
 # compile for musl (for docker image)
 compile features="":  _create-out-dir
@@ -97,7 +102,10 @@ deploy-crs:
 
 # Deploy child cluster using docker & kubead,
 deploy-child-cluster:
-    kubectl --context kind-dev apply -f testdata/cluster_docker_kcp.yaml
+    kubectl --context kind-dev apply -f testdata/cluster_quickstart.yaml
+
+deploy-class:
+    kubectl --context kind-dev apply -f testdata/class_quickstart.yaml
 
 # Add and update helm repos used
 update-helm-repos:
