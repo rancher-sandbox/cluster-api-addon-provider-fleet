@@ -11,8 +11,8 @@ use kube::{api::ResourceExt, runtime::controller::Action, Resource};
 
 use std::sync::Arc;
 
-use super::controller::{get_or_create, Context, FleetBundle, FleetController};
-use super::SyncError;
+use super::controller::{get_or_create, patch, Context, FleetBundle, FleetController};
+use super::{GroupSyncError, SyncError};
 
 pub static CLUSTER_CLASS_LABEL: &str = "clusterclass-name.fleet.addons.cluster.x-k8s.io";
 
@@ -54,10 +54,19 @@ impl From<&ClusterClass> for ClusterGroup {
 
 impl FleetBundle for FleetClusterClassBundle {
     async fn sync(&self, ctx: Arc<Context>) -> Result<Action> {
-        get_or_create(ctx, self.fleet_group.clone())
+        get_or_create(ctx.clone(), self.fleet_group.clone())
             .await
-            .map_err(SyncError::GroupSync)
-            .map_err(Into::into)
+            .map_err(Into::<GroupSyncError>::into)
+            .map_err(Into::<SyncError>::into)?;
+
+        if let Some(true) = self.config.spec.patch_resource {
+            patch(ctx, self.fleet_group.clone())
+                .await
+                .map_err(Into::<GroupSyncError>::into)
+                .map_err(Into::<SyncError>::into)?;
+        }
+
+        Ok(Action::await_change())
     }
 }
 

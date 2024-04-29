@@ -12,14 +12,14 @@ use kube::{api::ResourceExt, runtime::controller::Action, Resource};
 use std::sync::Arc;
 
 use super::cluster_class::CLUSTER_CLASS_LABEL;
-use super::controller::{get_or_create, Context, FleetBundle, FleetController};
-use super::SyncError;
+use super::controller::{get_or_create, patch, Context, FleetBundle, FleetController};
+use super::{ClusterSyncError, SyncError};
 
 pub static CONTROLPLANE_READY_CONDITION: &str = "ControlPlaneReady";
 
 pub struct FleetClusterBundle {
     fleet: fleet_cluster::Cluster,
-    config: FleetAddonConfig
+    config: FleetAddonConfig,
 }
 
 impl From<&Cluster> for fleet_cluster::Cluster {
@@ -60,10 +60,19 @@ impl From<&Cluster> for fleet_cluster::Cluster {
 
 impl FleetBundle for FleetClusterBundle {
     async fn sync(&self, ctx: Arc<Context>) -> Result<Action> {
-        get_or_create(ctx, self.fleet.clone())
+        get_or_create(ctx.clone(), self.fleet.clone())
             .await
-            .map_err(SyncError::ClusterSync)
-            .map_err(Into::into)
+            .map_err(Into::<ClusterSyncError>::into)
+            .map_err(Into::<SyncError>::into)?;
+
+        if let Some(true) = self.config.spec.patch_resource {
+            patch(ctx, self.fleet.clone())
+                .await
+                .map_err(Into::<ClusterSyncError>::into)
+                .map_err(Into::<SyncError>::into)?;
+        }
+
+        Ok(Action::await_change())
     }
 }
 
@@ -91,7 +100,7 @@ impl FleetController for Cluster {
             fleet.metadata.owner_references = None
         }
 
-        Ok(FleetClusterBundle{
+        Ok(FleetClusterBundle {
             fleet,
             config: config.clone(),
         })

@@ -2,14 +2,32 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum SyncError {
-    #[error("Cluster sync error: {0}")]
-    ClusterSync(#[source] GetOrCreateError),
+    #[error("{0}")]
+    ClusterSync(#[from] ClusterSyncError),
 
-    #[error("Cluster group sync error: {0}")]
-    GroupSync(#[source] GetOrCreateError),
+    #[error("{0}")]
+    GroupSync(#[from] GroupSyncError),
 
     #[error("Return early")]
     EarlyReturn,
+}
+
+#[derive(Error, Debug)]
+pub enum ClusterSyncError {
+    #[error("Cluster create error: {0}")]
+    GetOrCreateError(#[from] GetOrCreateError),
+
+    #[error("Cluster update error: {0}")]
+    PatchError(#[from] PatchError),
+}
+
+#[derive(Error, Debug)]
+pub enum GroupSyncError {
+    #[error("Cluster group create error: {0}")]
+    GetOrCreateError(#[from] GetOrCreateError),
+
+    #[error("Cluster group update error: {0}")]
+    PatchError(#[from] PatchError),
 }
 
 #[derive(Error, Debug)]
@@ -19,6 +37,15 @@ pub enum GetOrCreateError {
 
     #[error("Create error: {0}")]
     Create(#[source] kube::Error),
+
+    #[error("Diagnostics error: {0}")]
+    Event(#[from] kube::Error),
+}
+
+#[derive(Error, Debug)]
+pub enum PatchError {
+    #[error("Patch error: {0}")]
+    Patch(#[source] kube::Error),
 
     #[error("Diagnostics error: {0}")]
     Event(#[from] kube::Error),
