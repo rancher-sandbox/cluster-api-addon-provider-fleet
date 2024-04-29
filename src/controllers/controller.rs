@@ -95,7 +95,7 @@ where
     Self: kube::Resource<DynamicType = (), Scope = NamespaceResourceScope>,
     Self: kube::ResourceExt,
 {
-    type Bundle: FleetBundle + for<'a> From<&'a Self>;
+    type Bundle: FleetBundle;
 
     #[instrument(skip_all, fields(trace_id = display(telemetry::get_trace_id()), name = self.name_any(), namespace = self.namespace()))]
     async fn reconcile(self: Arc<Self>, ctx: Arc<Context>) -> crate::Result<Action> {
@@ -115,7 +115,7 @@ where
 
         finalizer(&cluster_api, FLEET_FINALIZER, self, |event| async {
             let r = match event {
-                finalizer::Event::Apply(c) => c.to_bundle(&config)?.into().sync(ctx).await,
+                finalizer::Event::Apply(c) => c.to_bundle(&config)?.sync(ctx).await,
                 finalizer::Event::Cleanup(c) => c.cleanup(ctx).await,
             };
 
@@ -147,5 +147,5 @@ where
         Ok(Action::await_change())
     }
 
-    fn to_bundle(&self, config: &FleetAddonConfig) -> crate::Result<impl Into<Self::Bundle>>;
+    fn to_bundle(&self, config: &FleetAddonConfig) -> crate::Result<Self::Bundle>;
 }

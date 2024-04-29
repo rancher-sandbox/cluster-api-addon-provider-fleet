@@ -32,6 +32,10 @@ spec:
                       This will create Fleet Cluster for each Cluster with the same name. In case the cluster specifies topology.class, the name of the ClusterClass will be added to the Fleet Cluster labels.
                     nullable: true
                     type: boolean
+                  set_owner_references:
+                    description: Setting to disable setting owner references on the created resources
+                    nullable: true
+                    type: boolean
                 type: object
               cluster_class:
                 description: Cluster class controller settings
@@ -44,7 +48,15 @@ spec:
                       This will create Fleet ClusterGroups for each ClusterClaster with the same name.
                     nullable: true
                     type: boolean
+                  set_owner_references:
+                    description: Setting to disable setting owner references on the created resources
+                    nullable: true
+                    type: boolean
                 type: object
+              patch_resource:
+                description: Allow to patch resources, maintaining the desired state.
+                nullable: true
+                type: boolean
             type: object
         required:
         - spec

@@ -1,6 +1,6 @@
 use crate::api::capi_cluster::{Cluster, ClusterTopology};
 
-use crate::api::fleet_addon_config::FleetAddonConfig;
+use crate::api::fleet_addon_config::{ClusterConfig, FleetAddonConfig};
 use crate::api::fleet_cluster;
 
 use crate::Result;
@@ -19,14 +19,7 @@ pub static CONTROLPLANE_READY_CONDITION: &str = "ControlPlaneReady";
 
 pub struct FleetClusterBundle {
     fleet: fleet_cluster::Cluster,
-}
-
-impl From<&Cluster> for FleetClusterBundle {
-    fn from(cluster: &Cluster) -> Self {
-        Self {
-            fleet: cluster.into(),
-        }
-    }
+    config: FleetAddonConfig
 }
 
 impl From<&Cluster> for fleet_cluster::Cluster {
@@ -77,7 +70,7 @@ impl FleetBundle for FleetClusterBundle {
 impl FleetController for Cluster {
     type Bundle = FleetClusterBundle;
 
-    fn to_bundle(&self, config: &FleetAddonConfig) -> Result<&Self> {
+    fn to_bundle(&self, config: &FleetAddonConfig) -> Result<FleetClusterBundle> {
         config
             .spec
             .cluster
@@ -85,7 +78,23 @@ impl FleetController for Cluster {
             .filter_map(|c| c.enabled)
             .find(|&enabled| enabled)
             .ok_or(SyncError::EarlyReturn)?;
-        self.cluster_ready().ok_or(SyncError::EarlyReturn.into())
+
+        self.cluster_ready().ok_or(SyncError::EarlyReturn)?;
+
+        let mut fleet: fleet_cluster::Cluster = self.into();
+        if let Some(ClusterConfig {
+            set_owner_references: Some(true),
+            ..
+        }) = config.spec.cluster
+        {
+        } else {
+            fleet.metadata.owner_references = None
+        }
+
+        Ok(FleetClusterBundle{
+            fleet,
+            config: config.clone(),
+        })
     }
 }
 

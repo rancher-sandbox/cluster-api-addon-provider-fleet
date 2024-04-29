@@ -1,6 +1,6 @@
 use crate::api::capi_clusterclass::ClusterClass;
 
-use crate::api::fleet_addon_config::FleetAddonConfig;
+use crate::api::fleet_addon_config::{ClusterClassConfig, FleetAddonConfig};
 use crate::api::fleet_clustergroup::{ClusterGroup, ClusterGroupSelector, ClusterGroupSpec};
 use crate::Result;
 
@@ -18,14 +18,7 @@ pub static CLUSTER_CLASS_LABEL: &str = "clusterclass-name.fleet.addons.cluster.x
 
 pub struct FleetClusterClassBundle {
     fleet_group: ClusterGroup,
-}
-
-impl From<&ClusterClass> for FleetClusterClassBundle {
-    fn from(cluster_class: &ClusterClass) -> Self {
-        Self {
-            fleet_group: cluster_class.into(),
-        }
-    }
+    config: FleetAddonConfig,
 }
 
 impl From<&ClusterClass> for ClusterGroup {
@@ -71,15 +64,28 @@ impl FleetBundle for FleetClusterClassBundle {
 impl FleetController for ClusterClass {
     type Bundle = FleetClusterClassBundle;
 
-    fn to_bundle(&self, config: &FleetAddonConfig) -> Result<&Self> {
+    fn to_bundle(&self, config: &FleetAddonConfig) -> Result<FleetClusterClassBundle> {
         config
             .spec
-            .cluster
+            .cluster_class
             .iter()
             .filter_map(|c| c.enabled)
             .find(|&enabled| enabled)
             .ok_or(SyncError::EarlyReturn)?;
 
-        Ok(self)
+        let mut fleet_group: ClusterGroup = self.into();
+        if let Some(ClusterClassConfig {
+            set_owner_references: Some(true),
+            ..
+        }) = config.spec.cluster_class
+        {
+        } else {
+            fleet_group.metadata.owner_references = None
+        }
+
+        Ok(FleetClusterClassBundle {
+            fleet_group,
+            config: config.clone(),
+        })
     }
 }
