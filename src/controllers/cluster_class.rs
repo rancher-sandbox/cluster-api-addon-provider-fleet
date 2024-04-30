@@ -1,6 +1,6 @@
 use crate::api::capi_clusterclass::ClusterClass;
 
-use crate::api::fleet_addon_config::FleetAddonConfig;
+use crate::api::fleet_addon_config::{ClusterClassConfig, FleetAddonConfig};
 use crate::api::fleet_clustergroup::{ClusterGroup, ClusterGroupSelector, ClusterGroupSpec};
 use crate::Result;
 
@@ -11,21 +11,14 @@ use kube::{api::ResourceExt, runtime::controller::Action, Resource};
 
 use std::sync::Arc;
 
-use super::controller::{get_or_create, Context, FleetBundle, FleetController};
-use super::SyncError;
+use super::controller::{get_or_create, patch, Context, FleetBundle, FleetController};
+use super::{GroupSyncError, SyncError};
 
 pub static CLUSTER_CLASS_LABEL: &str = "clusterclass-name.fleet.addons.cluster.x-k8s.io";
 
 pub struct FleetClusterClassBundle {
     fleet_group: ClusterGroup,
-}
-
-impl From<&ClusterClass> for FleetClusterClassBundle {
-    fn from(cluster_class: &ClusterClass) -> Self {
-        Self {
-            fleet_group: cluster_class.into(),
-        }
-    }
+    config: FleetAddonConfig,
 }
 
 impl From<&ClusterClass> for ClusterGroup {
@@ -61,25 +54,47 @@ impl From<&ClusterClass> for ClusterGroup {
 
 impl FleetBundle for FleetClusterClassBundle {
     async fn sync(&self, ctx: Arc<Context>) -> Result<Action> {
-        get_or_create(ctx, self.fleet_group.clone())
+        get_or_create(ctx.clone(), self.fleet_group.clone())
             .await
-            .map_err(SyncError::GroupSync)
-            .map_err(Into::into)
+            .map_err(Into::<GroupSyncError>::into)
+            .map_err(Into::<SyncError>::into)?;
+
+        if let Some(true) = self.config.spec.patch_resource {
+            patch(ctx, self.fleet_group.clone())
+                .await
+                .map_err(Into::<GroupSyncError>::into)
+                .map_err(Into::<SyncError>::into)?;
+        }
+
+        Ok(Action::await_change())
     }
 }
 
 impl FleetController for ClusterClass {
     type Bundle = FleetClusterClassBundle;
 
-    fn to_bundle(&self, config: &FleetAddonConfig) -> Result<&Self> {
+    fn to_bundle(&self, config: &FleetAddonConfig) -> Result<FleetClusterClassBundle> {
         config
             .spec
-            .cluster
+            .cluster_class
             .iter()
             .filter_map(|c| c.enabled)
             .find(|&enabled| enabled)
             .ok_or(SyncError::EarlyReturn)?;
 
-        Ok(self)
+        let mut fleet_group: ClusterGroup = self.into();
+        if let Some(ClusterClassConfig {
+            set_owner_references: Some(true),
+            ..
+        }) = config.spec.cluster_class
+        {
+        } else {
+            fleet_group.metadata.owner_references = None
+        }
+
+        Ok(FleetClusterClassBundle {
+            fleet_group,
+            config: config.clone(),
+        })
     }
 }

@@ -1,11 +1,12 @@
 use crate::api::fleet_addon_config::FleetAddonConfig;
+use crate::controllers::PatchError;
 use crate::metrics::Diagnostics;
 use crate::{telemetry, Error, Metrics};
 use chrono::Utc;
 
 use k8s_openapi::NamespaceResourceScope;
 
-use kube::api::PostParams;
+use kube::api::{Patch, PatchParams, PostParams};
 
 use kube::runtime::events::{Event, EventType};
 use kube::runtime::finalizer;
@@ -84,6 +85,51 @@ where
     Ok(Action::await_change())
 }
 
+pub(crate) async fn patch<R>(ctx: Arc<Context>, res: R) -> Result<Action, PatchError>
+where
+    R: std::fmt::Debug,
+    R: Clone + Serialize + DeserializeOwned,
+    R: kube::Resource<DynamicType = (), Scope = NamespaceResourceScope>,
+    R: kube::ResourceExt,
+{
+    let ns = res
+        .meta()
+        .namespace
+        .clone()
+        .unwrap_or(String::from("default"));
+    let api: Api<R> = Api::namespaced(ctx.client.clone(), &ns);
+
+    api.patch(
+        &res.name_any(),
+        &PatchParams::apply("addon-provider-fleet"),
+        &Patch::Apply(res.clone()),
+    )
+    .await
+    .map_err(PatchError::Patch)?;
+
+    info!("Updated fleet object");
+    ctx.diagnostics
+        .read()
+        .await
+        .recorder(ctx.client.clone(), &res)
+        // Record object creation
+        .publish(Event {
+            type_: EventType::Normal,
+            reason: "Updated".into(),
+            note: Some(format!(
+                "Updated fleet object `{}` in `{}`",
+                res.name_any(),
+                res.namespace().unwrap_or_default()
+            )),
+            action: "Creating".into(),
+            secondary: None,
+        })
+        .await
+        .map_err(PatchError::Event)?;
+
+    Ok(Action::await_change())
+}
+
 pub(crate) trait FleetBundle {
     async fn sync(&self, ctx: Arc<Context>) -> crate::Result<Action>;
 }
@@ -95,7 +141,7 @@ where
     Self: kube::Resource<DynamicType = (), Scope = NamespaceResourceScope>,
     Self: kube::ResourceExt,
 {
-    type Bundle: FleetBundle + for<'a> From<&'a Self>;
+    type Bundle: FleetBundle;
 
     #[instrument(skip_all, fields(trace_id = display(telemetry::get_trace_id()), name = self.name_any(), namespace = self.namespace()))]
     async fn reconcile(self: Arc<Self>, ctx: Arc<Context>) -> crate::Result<Action> {
@@ -115,7 +161,7 @@ where
 
         finalizer(&cluster_api, FLEET_FINALIZER, self, |event| async {
             let r = match event {
-                finalizer::Event::Apply(c) => c.to_bundle(&config)?.into().sync(ctx).await,
+                finalizer::Event::Apply(c) => c.to_bundle(&config)?.sync(ctx).await,
                 finalizer::Event::Cleanup(c) => c.cleanup(ctx).await,
             };
 
@@ -147,5 +193,5 @@ where
         Ok(Action::await_change())
     }
 
-    fn to_bundle(&self, config: &FleetAddonConfig) -> crate::Result<impl Into<Self::Bundle>>;
+    fn to_bundle(&self, config: &FleetAddonConfig) -> crate::Result<Self::Bundle>;
 }

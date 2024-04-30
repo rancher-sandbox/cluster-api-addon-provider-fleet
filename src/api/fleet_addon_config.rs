@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
     version = "v1alpha1"
 )]
 pub struct FleetAddonConfigSpec {
+    /// Allow to patch resources, maintaining the desired state.
+    pub patch_resource: Option<bool>,
     /// Cluster class controller settings
     pub cluster_class: Option<ClusterClassConfig>,
     /// Cluster controller settings
@@ -21,10 +23,13 @@ impl Default for FleetAddonConfig {
         Self {
             metadata: Default::default(),
             spec: FleetAddonConfigSpec {
+                patch_resource: Some(true),
                 cluster_class: Some(ClusterClassConfig {
+                    set_owner_references: Some(true),
                     enabled: Some(true),
                 }),
                 cluster: Some(ClusterConfig {
+                    set_owner_references: Some(true),
                     enabled: Some(true),
                 }),
             },
@@ -38,6 +43,9 @@ pub struct ClusterClassConfig {
     ///
     /// This will create Fleet ClusterGroups for each ClusterClaster with the same name.
     pub enabled: Option<bool>,
+
+    /// Setting to disable setting owner references on the created resources
+    pub set_owner_references: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, JsonSchema)]
@@ -48,4 +56,7 @@ pub struct ClusterConfig {
     /// In case the cluster specifies topology.class, the name of the ClusterClass
     /// will be added to the Fleet Cluster labels.
     pub enabled: Option<bool>,
+
+    /// Setting to disable setting owner references on the created resources
+    pub set_owner_references: Option<bool>,
 }

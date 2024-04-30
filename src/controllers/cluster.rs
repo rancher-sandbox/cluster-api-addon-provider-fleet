@@ -1,6 +1,6 @@
 use crate::api::capi_cluster::{Cluster, ClusterTopology};
 
-use crate::api::fleet_addon_config::FleetAddonConfig;
+use crate::api::fleet_addon_config::{ClusterConfig, FleetAddonConfig};
 use crate::api::fleet_cluster;
 
 use crate::Result;
@@ -12,21 +12,14 @@ use kube::{api::ResourceExt, runtime::controller::Action, Resource};
 use std::sync::Arc;
 
 use super::cluster_class::CLUSTER_CLASS_LABEL;
-use super::controller::{get_or_create, Context, FleetBundle, FleetController};
-use super::SyncError;
+use super::controller::{get_or_create, patch, Context, FleetBundle, FleetController};
+use super::{ClusterSyncError, SyncError};
 
 pub static CONTROLPLANE_READY_CONDITION: &str = "ControlPlaneReady";
 
 pub struct FleetClusterBundle {
     fleet: fleet_cluster::Cluster,
-}
-
-impl From<&Cluster> for FleetClusterBundle {
-    fn from(cluster: &Cluster) -> Self {
-        Self {
-            fleet: cluster.into(),
-        }
-    }
+    config: FleetAddonConfig,
 }
 
 impl From<&Cluster> for fleet_cluster::Cluster {
@@ -67,17 +60,26 @@ impl From<&Cluster> for fleet_cluster::Cluster {
 
 impl FleetBundle for FleetClusterBundle {
     async fn sync(&self, ctx: Arc<Context>) -> Result<Action> {
-        get_or_create(ctx, self.fleet.clone())
+        get_or_create(ctx.clone(), self.fleet.clone())
             .await
-            .map_err(SyncError::ClusterSync)
-            .map_err(Into::into)
+            .map_err(Into::<ClusterSyncError>::into)
+            .map_err(Into::<SyncError>::into)?;
+
+        if let Some(true) = self.config.spec.patch_resource {
+            patch(ctx, self.fleet.clone())
+                .await
+                .map_err(Into::<ClusterSyncError>::into)
+                .map_err(Into::<SyncError>::into)?;
+        }
+
+        Ok(Action::await_change())
     }
 }
 
 impl FleetController for Cluster {
     type Bundle = FleetClusterBundle;
 
-    fn to_bundle(&self, config: &FleetAddonConfig) -> Result<&Self> {
+    fn to_bundle(&self, config: &FleetAddonConfig) -> Result<FleetClusterBundle> {
         config
             .spec
             .cluster
@@ -85,7 +87,23 @@ impl FleetController for Cluster {
             .filter_map(|c| c.enabled)
             .find(|&enabled| enabled)
             .ok_or(SyncError::EarlyReturn)?;
-        self.cluster_ready().ok_or(SyncError::EarlyReturn.into())
+
+        self.cluster_ready().ok_or(SyncError::EarlyReturn)?;
+
+        let mut fleet: fleet_cluster::Cluster = self.into();
+        if let Some(ClusterConfig {
+            set_owner_references: Some(true),
+            ..
+        }) = config.spec.cluster
+        {
+        } else {
+            fleet.metadata.owner_references = None
+        }
+
+        Ok(FleetClusterBundle {
+            fleet,
+            config: config.clone(),
+        })
     }
 }
 
