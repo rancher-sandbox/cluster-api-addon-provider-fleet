@@ -82,11 +82,12 @@ load-base: build-base
     kind load docker-image {{ORG}}/{{NAME}}:{{TAG}} --name dev
 
 # Start local dev environment
-start-dev:
-    rm -rf _out/ || true
+start-dev: _cleanup-out-dir _create-out-dir
     just update-helm-repos
     kind delete cluster --name dev || true
-    kind create cluster --config --image=kindest/node:v{{KUBE_VERSION}} --config testdata/kind-config.yaml
+    export LOCAL_IP=$(ip -4 -j route list default | jq -r .[0].prefsrc)
+    envsubst < testdata/kind-config.yaml > _out/kind-config.yaml
+    kind create cluster --config --image=kindest/node:v{{KUBE_VERSION}} --config _out/kind-config.yaml
     just install-fleet
     just install-capi
     kubectl wait pods --for=condition=Ready --timeout=300s --all --all-namespaces
@@ -142,13 +143,14 @@ release-manifests: _create-out-dir _download-kustomize
 # Full e2e test of importing cluster in fleet
 test-import: start-dev deploy deploy-child-cluster deploy-crs
     kubectl wait pods --for=condition=Ready --timeout=300s --all --all-namespaces
-    kubectl wait clusters.fleet.cattle.io --timeout=300s --for=condition=Imported docker-demo
+    kubectl wait clusters.fleet.cattle.io --timeout=300s --for=condition=Ready docker-demo
 
 # Full e2e test of importing cluster in fleet
 test-cluster-class-import: start-dev deploy deploy-child-cluster-class deploy-crs
     kubectl wait pods --for=condition=Ready --timeout=300s --all --all-namespaces
     kubectl wait clustergroups.fleet.cattle.io --timeout=300s --for=jsonpath='{.status.clusterCount}=1' quick-start
-    kubectl wait clusters.fleet.cattle.io --timeout=300s --for=condition=Imported capi-quickstart
+    kubectl wait clustergroups.fleet.cattle.io --timeout=300s --for=condition=Ready quick-start
+    kubectl wait clusters.fleet.cattle.io --timeout=300s --for=condition=Ready capi-quickstart
 
 # Install kopium
 [private]
@@ -192,4 +194,8 @@ _download-yq:
 [private]
 _create-out-dir:
     mkdir -p _out
+
+[private]
+_cleanup-out-dir:
+    rm -rf _out/ || true
 
