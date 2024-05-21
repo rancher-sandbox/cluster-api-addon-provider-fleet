@@ -19,8 +19,8 @@ default:
     @just --list --unsorted --color=always
 
 # Generates stuff
-generate:
-    just generate-addon-crds
+generate features="":
+    just generate-addon-crds {{features}}
     just generate-crds
 
 # generates files for CRDS
@@ -29,13 +29,14 @@ generate-crds: _create-out-dir _install-kopium _download-yq
     just _generate-kopium-url {{KOPIUM_BIN}} "https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/main/config/crd/bases/cluster.x-k8s.io_clusterclasses.yaml" "src/api/capi_clusterclass.rs" ""
     just _generate-kopium-url {{KOPIUM_BIN}} "https://raw.githubusercontent.com/rancher/fleet/main/charts/fleet-crd/templates/crds.yaml" "src/api/fleet_cluster.rs" "select(.spec.names.singular==\"cluster\")" "--no-condition"
     just _generate-kopium-url {{KOPIUM_BIN}} "https://raw.githubusercontent.com/rancher/fleet/main/charts/fleet-crd/templates/crds.yaml" "src/api/fleet_clustergroup.rs" "select(.spec.names.singular==\"clustergroup\")" "--no-condition"
+    just _generate-kopium-url {{KOPIUM_BIN}} "https://raw.githubusercontent.com/rancher/fleet/main/charts/fleet-crd/templates/crds.yaml" "src/api/fleet_cluster_registration_token.rs" "select(.spec.names.singular==\"clusterregistrationtoken\")" ""
 
 [private]
 _generate-kopium-url kpath="" source="" dest="" yqexp="." condition="":
     curl -sSL {{source}} | {{YQ_BIN}} '{{yqexp}}' | {{kpath}} -D Default {{condition}} -f - > {{dest}}
 
-generate-addon-crds:
-    cargo run --bin crdgen > config/crds/fleet-addon-config.yaml
+generate-addon-crds features="":
+    cargo run --features={{features}} --bin crdgen > config/crds/fleet-addon-config.yaml
 
 # run with opentelemetry
 run-telemetry:
@@ -70,7 +71,9 @@ _build features="":
   docker build -t {{ORG}}/{{NAME}}:{{TAG}} .
 
 # docker build base
-build-base: (_build "")
+build-base features="":
+    just _build {{features}}
+
 # docker build with telemetry
 build-otel: (_build "telemetry")
 
@@ -78,7 +81,8 @@ build-otel: (_build "telemetry")
 docker-push:
     docker push {{ORG}}/{{NAME}}:{{TAG}}
 
-load-base: build-base
+load-base features="":
+    just build-base {{features}}
     kind load docker-image {{ORG}}/{{NAME}}:{{TAG}} --name dev
 
 # Start local dev environment
@@ -131,7 +135,9 @@ install-capi: _download-clusterctl
     EXP_CLUSTER_RESOURCE_SET=true CLUSTER_TOPOLOGY=true {{CLUSTERCTL_BIN}} init -i docker
 
 # Deploy will deploy the operator
-deploy: _download-kustomize load-base
+deploy features="": _download-kustomize
+    just generate {{features}}
+    just load-base {{features}}
     {{KUSTOMIZE_BIN}} build config/default | kubectl apply -f -
 
 undeploy: _download-kustomize
@@ -146,7 +152,10 @@ test-import: start-dev deploy deploy-child-cluster deploy-crs
     kubectl wait clusters.fleet.cattle.io --timeout=300s --for=condition=Ready docker-demo
 
 # Full e2e test of importing cluster in fleet
-test-cluster-class-import: start-dev deploy deploy-child-cluster-class deploy-crs
+test-cluster-class-import: start-dev
+    just deploy "agent-initiated"
+    just deploy-child-cluster-class
+    just deploy-crs
     kubectl wait pods --for=condition=Ready --timeout=300s --all --all-namespaces
     kubectl wait clustergroups.fleet.cattle.io --timeout=300s --for=jsonpath='{.status.clusterCount}=1' quick-start
     kubectl wait clustergroups.fleet.cattle.io --timeout=300s --for=condition=Ready quick-start
@@ -155,7 +164,7 @@ test-cluster-class-import: start-dev deploy deploy-child-cluster-class deploy-cr
 # Install kopium
 [private]
 _install-kopium:
-    cargo install --git https://github.com/kube-rs/kopium.git --branch main --root {{OUT_DIR}}
+    cargo install --git https://github.com/kube-rs/kopium.git --tag 0.19.0 --root {{OUT_DIR}}
 
 # Download kustomize
 [private]

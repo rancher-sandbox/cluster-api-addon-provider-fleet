@@ -8,6 +8,9 @@ pub enum SyncError {
     #[error("{0}")]
     GroupSync(#[from] GroupSyncError),
 
+    #[error("Cluster registration token create error {0}")]
+    ClusterRegistrationTokenSync(#[from] GetOrCreateError),
+
     #[error("Return early")]
     EarlyReturn,
 }
