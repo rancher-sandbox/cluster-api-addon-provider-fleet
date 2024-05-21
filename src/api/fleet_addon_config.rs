@@ -24,14 +24,8 @@ impl Default for FleetAddonConfig {
             metadata: Default::default(),
             spec: FleetAddonConfigSpec {
                 patch_resource: Some(true),
-                cluster_class: Some(ClusterClassConfig {
-                    set_owner_references: Some(true),
-                    enabled: Some(true),
-                }),
-                cluster: Some(ClusterConfig {
-                    set_owner_references: Some(true),
-                    enabled: Some(true),
-                }),
+                cluster_class: Some(ClusterClassConfig::default()),
+                cluster: Some(ClusterConfig::default()),
             },
         }
     }
@@ -48,6 +42,15 @@ pub struct ClusterClassConfig {
     pub set_owner_references: Option<bool>,
 }
 
+impl Default for ClusterClassConfig {
+    fn default() -> Self {
+        Self {
+            set_owner_references: Some(true),
+            enabled: Some(true),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, JsonSchema)]
 pub struct ClusterConfig {
     /// Enable Cluster config funtionality.
@@ -59,4 +62,19 @@ pub struct ClusterConfig {
 
     /// Setting to disable setting owner references on the created resources
     pub set_owner_references: Option<bool>,
+
+    #[cfg(feature = "agent-initiated")]
+    /// Prepare initial cluster for agent initiated connection
+    pub agent_initiated: Option<bool>,
+}
+
+impl Default for ClusterConfig {
+    fn default() -> Self {
+        Self {
+            set_owner_references: Some(true),
+            enabled: Some(true),
+            #[cfg(feature = "agent-initiated")]
+            agent_initiated: Some(true),
+        }
+    }
 }

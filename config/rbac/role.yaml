@@ -75,6 +75,7 @@ rules:
   resources:
   - clusters
   - clustergroups
+  - clusterregistrationtokens
   verbs:
   - create
   - get
