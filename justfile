@@ -71,8 +71,10 @@ _build features="":
   docker build -t {{ORG}}/{{NAME}}:{{TAG}} .
 
 # docker build base
-build-base features="":
-    just _build {{features}}
+build-base: (_build "")
+
+# docker build base with agent initiated
+build-agent-initiated: (_build "agent-initiated")
 
 # docker build with telemetry
 build-otel: (_build "telemetry")
@@ -82,7 +84,7 @@ docker-push:
     docker push {{ORG}}/{{NAME}}:{{TAG}}
 
 load-base features="":
-    just build-base {{features}}
+    just _build {{features}}
     kind load docker-image {{ORG}}/{{NAME}}:{{TAG}} --name dev
 
 # Start local dev environment
