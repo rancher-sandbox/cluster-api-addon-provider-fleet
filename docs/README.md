@@ -1,6 +1,20 @@
-# Cluster API Add-on Provider for Fleet
+# Documentation Index
 
-> NOTE: this is a work in progress. The project is looking for more contributors.
+## Quick start
+Before starting your journey with CAAPF, you may want to familiarize with CAPI and the concept of providers.
+- [Cluster API Quick Start](https://cluster-api.sigs.k8s.io/user/quick-start.html)
+Deploy your own CAPI management cluster and install the Add-on Provider for Fleet.
+- [Getting started with CAAPF](./book/src/topics/index.md)
+
+## Features
+- [Roadmap](./book/src/roadmap.md)
+
+## Development
+If you are a developer, the project provides a series of commands that you can use to configure your local environment and operate with the provider.
+- [Development Guide](./book/src/developers/development.md)
+- [Releasing](./book/src/developers/release.md)
+
+> Remember that this is a work in progress and the project is looking for more contributors.
 
 ## What is Cluster API Add-on Provider for Fleet (CAAPF)?
 
@@ -17,7 +31,7 @@ It provides the following functionality:
 
 ## Getting started
 
-You can refer to the provider documentation [here](./docs/book/src/.).
+You can refer to the rest of the provider documentation [here](./docs/book/src/.).
 
 ## Get in contact
 
