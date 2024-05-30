@@ -8,6 +8,7 @@ pkgs.mkShell {
     rustfmt       # Formatter
     clippy        # Linter
     just
+    fzf
     kind
     kubernetes-helm
     clusterctl
@@ -15,8 +16,6 @@ pkgs.mkShell {
     k9s
     jq
     yq
-    envsubst
-    iproute2
     docker-client
     kustomize
   ];
