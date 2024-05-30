@@ -8,6 +8,20 @@
 - [helm](https://helm.sh/)
 - [just](https://github.com/casey/just)
 
+Alternatively:
+
+- [nix](https://nixos.org/download/)
+
+To enter the environment with prerequisites:
+
+```bash
+nix-shell
+```
+
+#### Common prerequisite
+
+- [docker](https://docs.docker.com/engine/install/)
+
 ### Create a local development environment
 
 1. Clone the [CAAPF](https://github.com/rancher-sandbox/cluster-api-addon-provider-fleet/) repository locally.
