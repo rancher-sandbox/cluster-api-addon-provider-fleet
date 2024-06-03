@@ -127,6 +127,8 @@ pub struct ClusterTopologyControlPlane {
     pub node_volume_detach_timeout: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replicas: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub variables: Option<ClusterTopologyControlPlaneVariables>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -177,6 +179,20 @@ pub struct ClusterTopologyControlPlaneMetadata {
     pub annotations: Option<BTreeMap<String, String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub labels: Option<BTreeMap<String, String>>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct ClusterTopologyControlPlaneVariables {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overrides: Option<Vec<ClusterTopologyControlPlaneVariablesOverrides>>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct ClusterTopologyControlPlaneVariablesOverrides {
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "definitionFrom")]
+    pub definition_from: Option<String>,
+    pub name: String,
+    pub value: serde_json::Value,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
