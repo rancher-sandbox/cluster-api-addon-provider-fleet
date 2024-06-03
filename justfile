@@ -32,7 +32,7 @@ generate-crds: _create-out-dir _install-kopium _download-yq
 
 [private]
 _generate-kopium-url kpath="" source="" dest="" yqexp="." condition="":
-    curl -sSL {{source}} | yq '{{yqexp}}' | {{kpath}} -D Default {{condition}} -f - > {{dest}}
+    curl -sSL {{source}} | yq '{{yqexp}}' | {{kpath}} -D Default {{condition}} -A -d -f - > {{dest}}
 
 generate-addon-crds features="":
     cargo run --features={{features}} --bin crdgen > config/crds/fleet-addon-config.yaml
@@ -190,7 +190,7 @@ _install-kopium:
     #!/usr/bin/env bash
     set -euxo pipefail
     [ -z `which kopium` ] || [ {{REFRESH_BIN}} != "0" ] || exit 0
-    cargo install --git https://github.com/kube-rs/kopium.git --tag 0.19.0 --root {{OUT_DIR}}
+    cargo install --git https://github.com/kube-rs/kopium.git --root {{OUT_DIR}}
 
 download-kustomize: _download-kustomize
 
