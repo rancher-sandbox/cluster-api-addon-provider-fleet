@@ -58,6 +58,7 @@ impl Cluster {
                     .set_owner_references
                     .is_some_and(|set| set)
                     .then_some(self.owner_ref(&()).into_iter().collect()),
+                name: config.naming.apply(self.name_any().into()),
                 ..self.into()
             },
             #[cfg(feature = "agent-initiated")]
