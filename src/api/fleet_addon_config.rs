@@ -63,8 +63,11 @@ pub struct ClusterConfig {
     /// Setting to disable setting owner references on the created resources
     pub set_owner_references: Option<bool>,
 
-    /// Specifies a name suffix for the fleet cluster
+    /// Naming settings for the fleet cluster
     pub naming: NamingStrategy,
+
+    /// Namespace selection for the fleet agent
+    pub agent_namespace: Option<String>,
 
     #[cfg(feature = "agent-initiated")]
     /// Prepare initial cluster for agent initiated connection
@@ -85,6 +88,7 @@ impl Default for ClusterConfig {
         Self {
             set_owner_references: Some(true),
             naming: Default::default(),
+            agent_namespace: "fleet-addon-agent".to_string().into(),
             enabled: Some(true),
             #[cfg(feature = "agent-initiated")]
             agent_initiated: Some(true),

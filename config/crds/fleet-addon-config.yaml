@@ -25,6 +25,10 @@ spec:
                 description: Cluster controller settings
                 nullable: true
                 properties:
+                  agent_namespace:
+                    description: Namespace selection for the fleet agent
+                    nullable: true
+                    type: string
                   enabled:
                     description: |-
                       Enable Cluster config funtionality.
@@ -33,7 +37,7 @@ spec:
                     nullable: true
                     type: boolean
                   naming:
-                    description: Specifies a name suffix for the fleet cluster
+                    description: Naming settings for the fleet cluster
                     properties:
                       prefix:
                         description: Specify a prefix for the Cluster name, applied to created Fleet cluster
