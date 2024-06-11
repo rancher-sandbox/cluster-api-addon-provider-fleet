@@ -58,22 +58,26 @@ impl Cluster {
                     .set_owner_references
                     .is_some_and(|set| set)
                     .then_some(self.owner_ref(&()).into_iter().collect()),
+                name: config.naming.apply(self.name_any().into()),
                 ..self.into()
             },
             #[cfg(feature = "agent-initiated")]
             spec: match config.agent_initiated {
                 Some(true) => fleet_cluster::ClusterSpec {
                     client_id: Some(Alphanumeric.sample_string(&mut rand::thread_rng(), 64)),
+                    agent_namespace: config.agent_namespace,
                     ..Default::default()
                 },
                 None | Some(false) => fleet_cluster::ClusterSpec {
                     kube_config_secret: Some(format!("{}-kubeconfig", self.name_any())),
+                    agent_namespace: config.agent_namespace,
                     ..Default::default()
                 },
             },
             #[cfg(not(feature = "agent-initiated"))]
             spec: fleet_cluster::ClusterSpec {
                 kube_config_secret: Some(format!("{}-kubeconfig", self.name_any())),
+                agent_namespace: config.agent_namespace,
                 ..Default::default()
             },
             status: Default::default(),

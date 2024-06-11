@@ -25,6 +25,10 @@ spec:
                 description: Cluster controller settings
                 nullable: true
                 properties:
+                  agent_namespace:
+                    description: Namespace selection for the fleet agent
+                    nullable: true
+                    type: string
                   enabled:
                     description: |-
                       Enable Cluster config funtionality.
@@ -32,10 +36,24 @@ spec:
                       This will create Fleet Cluster for each Cluster with the same name. In case the cluster specifies topology.class, the name of the ClusterClass will be added to the Fleet Cluster labels.
                     nullable: true
                     type: boolean
+                  naming:
+                    description: Naming settings for the fleet cluster
+                    properties:
+                      prefix:
+                        description: Specify a prefix for the Cluster name, applied to created Fleet cluster
+                        nullable: true
+                        type: string
+                      suffix:
+                        description: Specify a suffix for the Cluster name, applied to created Fleet cluster
+                        nullable: true
+                        type: string
+                    type: object
                   set_owner_references:
                     description: Setting to disable setting owner references on the created resources
                     nullable: true
                     type: boolean
+                required:
+                - naming
                 type: object
               cluster_class:
                 description: Cluster class controller settings
