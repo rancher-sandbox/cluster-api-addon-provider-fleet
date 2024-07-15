@@ -50,7 +50,7 @@ opentelemetry-otlp = { version = "0.16.0", features = [
 ], optional = true }
 tonic = { version = "0.11", optional = true }
 thiserror = "1.0.62"
-anyhow = "1.0.75"
+anyhow = "1.0.86"
 
 [dev-dependencies]
 assert-json-diff = "2.0.2"
