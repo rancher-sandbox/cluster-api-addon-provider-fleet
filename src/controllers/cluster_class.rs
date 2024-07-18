@@ -59,7 +59,7 @@ impl FleetBundle for FleetClusterClassBundle {
             .map_err(Into::<GroupSyncError>::into)
             .map_err(Into::<SyncError>::into)?;
 
-        if let Some(true) = self.config.spec.patch_resource {
+        if self.config.cluster_class_patch_enabled() {
             patch(ctx, self.fleet_group.clone())
                 .await
                 .map_err(Into::<GroupSyncError>::into)

@@ -22,22 +22,49 @@ spec:
             description: This provides a config for fleet addon functionality
             properties:
               cluster:
-                description: Cluster controller settings
+                description: |-
+                  Enable Cluster config funtionality.
+
+                  This will create Fleet Cluster for each Cluster with the same name. In case the cluster specifies topology.class, the name of the ClusterClass will be added to the Fleet Cluster labels.
                 nullable: true
                 properties:
-                  agent_namespace:
+                  agentNamespace:
                     description: Namespace selection for the fleet agent
                     nullable: true
                     type: string
-                  enabled:
-                    description: |-
-                      Enable Cluster config funtionality.
-
-                      This will create Fleet Cluster for each Cluster with the same name. In case the cluster specifies topology.class, the name of the ClusterClass will be added to the Fleet Cluster labels.
-                    nullable: true
-                    type: boolean
+                  namespaceSelector:
+                    description: 'Namespace label selector. If set, only clusters in the namespace matching label selector will be imported. WARN: this field controls the state of opened watches to the cluster. If changed, requires controller to be reloaded.'
+                    properties:
+                      matchExpressions:
+                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        items:
+                          description: A label selector requirement is a selector that contains values, a key, and an operator that relates the key and values.
+                          properties:
+                            key:
+                              description: key is the label key that the selector applies to.
+                              type: string
+                            operator:
+                              description: operator represents a key's relationship to a set of values. Valid operators are In, NotIn, Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: values is an array of string values. If the operator is In or NotIn, the values array must be non-empty. If the operator is Exists or DoesNotExist, the values array must be empty. This array is replaced during a strategic merge patch.
+                              items:
+                                type: string
+                              type: array
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        type: array
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        description: matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is "key", the operator is "In", and the values array contains only "value". The requirements are ANDed.
+                        type: object
+                    type: object
                   naming:
                     description: Naming settings for the fleet cluster
+                    nullable: true
                     properties:
                       prefix:
                         description: Specify a prefix for the Cluster name, applied to created Fleet cluster
@@ -48,100 +75,63 @@ spec:
                         nullable: true
                         type: string
                     type: object
-                  set_owner_references:
+                  patchResource:
+                    description: Allow to patch resources, maintaining the desired state. If is not set, resources will only be re-created in case of removal.
+                    nullable: true
+                    type: boolean
+                  selector:
+                    description: 'Cluster label selector. If set, only clusters matching label selector will be imported. WARN: this field controls the state of opened watches to the cluster. If changed, requires controller to be reloaded.'
+                    properties:
+                      matchExpressions:
+                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        items:
+                          description: A label selector requirement is a selector that contains values, a key, and an operator that relates the key and values.
+                          properties:
+                            key:
+                              description: key is the label key that the selector applies to.
+                              type: string
+                            operator:
+                              description: operator represents a key's relationship to a set of values. Valid operators are In, NotIn, Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: values is an array of string values. If the operator is In or NotIn, the values array must be non-empty. If the operator is Exists or DoesNotExist, the values array must be empty. This array is replaced during a strategic merge patch.
+                              items:
+                                type: string
+                              type: array
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        type: array
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        description: matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is "key", the operator is "In", and the values array contains only "value". The requirements are ANDed.
+                        type: object
+                    type: object
+                  setOwnerReferences:
                     description: Setting to disable setting owner references on the created resources
                     nullable: true
                     type: boolean
                 required:
-                - naming
+                - namespaceSelector
+                - selector
                 type: object
-              cluster_class:
-                description: Cluster class controller settings
-                nullable: true
-                properties:
-                  enabled:
-                    description: |-
-                      Enable clusterClass controller functionality.
+              clusterClass:
+                description: |-
+                  Enable clusterClass controller functionality.
 
-                      This will create Fleet ClusterGroups for each ClusterClaster with the same name.
+                  This will create Fleet ClusterGroups for each ClusterClaster with the same name.
+                nullable: true
+                properties:
+                  patchResource:
+                    description: Allow to patch resources, maintaining the desired state. If is not set, resources will only be re-created in case of removal.
                     nullable: true
                     type: boolean
-                  set_owner_references:
+                  setOwnerReferences:
                     description: Setting to disable setting owner references on the created resources
                     nullable: true
                     type: boolean
-                type: object
-              patch_resource:
-                description: Allow to patch resources, maintaining the desired state.
-                nullable: true
-                type: boolean
-              selectors:
-                description: Import label selectors configuration. If not set, import applies on every cluster.
-                nullable: true
-                properties:
-                  cluster:
-                    description: Cluster label selector. If set, only clusters matching label selector will be imported.
-                    properties:
-                      matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
-                        items:
-                          description: A label selector requirement is a selector that contains values, a key, and an operator that relates the key and values.
-                          properties:
-                            key:
-                              description: key is the label key that the selector applies to.
-                              type: string
-                            operator:
-                              description: operator represents a key's relationship to a set of values. Valid operators are In, NotIn, Exists and DoesNotExist.
-                              type: string
-                            values:
-                              description: values is an array of string values. If the operator is In or NotIn, the values array must be non-empty. If the operator is Exists or DoesNotExist, the values array must be empty. This array is replaced during a strategic merge patch.
-                              items:
-                                type: string
-                              type: array
-                          required:
-                          - key
-                          - operator
-                          type: object
-                        type: array
-                      matchLabels:
-                        additionalProperties:
-                          type: string
-                        description: matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is "key", the operator is "In", and the values array contains only "value". The requirements are ANDed.
-                        type: object
-                    type: object
-                  namespace:
-                    description: Namespace label selector. If set, only clusters in the namespace matching label selector will be imported.
-                    properties:
-                      matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
-                        items:
-                          description: A label selector requirement is a selector that contains values, a key, and an operator that relates the key and values.
-                          properties:
-                            key:
-                              description: key is the label key that the selector applies to.
-                              type: string
-                            operator:
-                              description: operator represents a key's relationship to a set of values. Valid operators are In, NotIn, Exists and DoesNotExist.
-                              type: string
-                            values:
-                              description: values is an array of string values. If the operator is In or NotIn, the values array must be non-empty. If the operator is Exists or DoesNotExist, the values array must be empty. This array is replaced during a strategic merge patch.
-                              items:
-                                type: string
-                              type: array
-                          required:
-                          - key
-                          - operator
-                          type: object
-                        type: array
-                      matchLabels:
-                        additionalProperties:
-                          type: string
-                        description: matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is "key", the operator is "In", and the values array contains only "value". The requirements are ANDed.
-                        type: object
-                    type: object
-                required:
-                - cluster
-                - namespace
                 type: object
             type: object
         required:

@@ -12,7 +12,7 @@ use futures::channel::mpsc::Sender;
 use k8s_openapi::api::core::v1::Namespace;
 use kube::api::ObjectMeta;
 
-use kube::core::SelectorExt;
+use kube::core::SelectorExt as _;
 use kube::{api::ResourceExt, runtime::controller::Action, Resource};
 #[cfg(feature = "agent-initiated")]
 use rand::distributions::{Alphanumeric, DistString as _};
@@ -64,7 +64,10 @@ impl Cluster {
                     .set_owner_references
                     .is_some_and(|set| set)
                     .then_some(self.owner_ref(&()).into_iter().collect()),
-                name: config.naming.apply(self.name_any().into()),
+                name: config
+                    .naming
+                    .unwrap_or_default()
+                    .apply(self.name_any().into()),
                 ..self.into()
             },
             #[cfg(feature = "agent-initiated")]
@@ -115,7 +118,7 @@ impl FleetBundle for FleetClusterBundle {
             .map_err(Into::<ClusterSyncError>::into)
             .map_err(Into::<SyncError>::into)?;
 
-        if let Some(true) = self.config.spec.patch_resource {
+        if self.config.cluster_patch_enabled() {
             patch(ctx.clone(), self.fleet.clone())
                 .await
                 .map_err(Into::<ClusterSyncError>::into)
