@@ -8,6 +8,9 @@ pub enum SyncError {
     #[error("{0}")]
     GroupSync(#[from] GroupSyncError),
 
+    #[error("{0}")]
+    LabelCheck(#[from] LabelCheckError),
+
     #[error("Cluster registration token create error {0}")]
     ClusterRegistrationTokenSync(#[from] GetOrCreateError),
 
@@ -43,6 +46,15 @@ pub enum GetOrCreateError {
 
     #[error("Diagnostics error: {0}")]
     Event(#[from] kube::Error),
+}
+
+#[derive(Error, Debug)]
+pub enum LabelCheckError {
+    #[error("Namespace lookup error: {0}")]
+    NamespaceLookup(#[from] kube::Error),
+
+    #[error("Parse expression error: {0}")]
+    Expression(#[from] kube::core::ParseExpressionError),
 }
 
 #[derive(Error, Debug)]

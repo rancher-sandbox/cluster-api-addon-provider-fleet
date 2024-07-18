@@ -85,7 +85,11 @@ pub async fn run_cluster_controller(state: State) {
     let clusters = Controller::new(
         clusters,
         Config::default()
-            .labels_from(&config.cluster_watch())
+            .labels_from(
+                &config
+                    .cluster_watch()
+                    .expect("valid cluster label selector"),
+            )
             .any_semantic(),
     )
     .owns(fleet, Config::default().any_semantic())
@@ -98,14 +102,22 @@ pub async fn run_cluster_controller(state: State) {
     )
     .for_each(|_| futures::future::ready(()));
 
-    if config.namespace_selector().selects_all() {
+    if config
+        .namespace_selector()
+        .expect("valid namespace selector")
+        .selects_all()
+    {
         return clusters.await;
     }
 
     let ns_controller = Controller::new(
         Api::<Namespace>::all(client.clone()),
         Config::default()
-            .labels_from(&config.namespace_selector())
+            .labels_from(
+                &config
+                    .namespace_selector()
+                    .expect("valid namespace selector"),
+            )
             .any_semantic(),
     )
     .shutdown_on_signal()

@@ -1,5 +1,8 @@
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::LabelSelector;
-use kube::{core::Selector, CustomResource};
+use kube::{
+    core::{ParseExpressionError, Selector},
+    CustomResource,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -157,32 +160,33 @@ pub struct Selectors {
 
 impl FleetAddonConfig {
     // Raw cluster selector
-    pub(crate) fn cluster_selector(&self) -> Selector {
+    pub(crate) fn cluster_selector(&self) -> Result<Selector, ParseExpressionError> {
         self.spec
             .cluster
             .as_ref()
             .map(|c| c.selectors.selector.clone())
             .unwrap_or_default()
-            .into()
+            .try_into()
     }
 
     // Provide a static label selector for cluster objects, which can be always be set
     // and will not cause cache events from resources in the labeled Namespace to be missed
-    pub(crate) fn cluster_watch(&self) -> Selector {
-        self.namespace_selector()
+    pub(crate) fn cluster_watch(&self) -> Result<Selector, ParseExpressionError> {
+        Ok(self
+            .namespace_selector()?
             .selects_all()
-            .then_some(self.cluster_selector())
-            .unwrap_or_default()
+            .then_some(self.cluster_selector()?)
+            .unwrap_or_default())
     }
 
     // Raw namespace selector
-    pub(crate) fn namespace_selector(&self) -> Selector {
+    pub(crate) fn namespace_selector(&self) -> Result<Selector, ParseExpressionError> {
         self.spec
             .cluster
             .as_ref()
             .map(|c| c.selectors.namespace_selector.clone())
             .unwrap_or_default()
-            .into()
+            .try_into()
     }
 
     // Check for general cluster operations, like create, patch, etc. Evaluates to false if disabled.
@@ -215,15 +219,6 @@ impl FleetAddonConfig {
             .unwrap_or_default()
             .filter(|&enabled| enabled)
             .is_some()
-    }
-
-    pub(crate) fn agent_install_namespace(&self) -> String {
-        let default = AGENT_NAMESPACE.to_string();
-        self.spec
-            .cluster
-            .as_ref()
-            .map(|c| c.agent_install_namespace())
-            .unwrap_or(default)
     }
 }
 
