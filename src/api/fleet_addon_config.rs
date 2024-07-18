@@ -1,4 +1,5 @@
-use kube::CustomResource;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::LabelSelector;
+use kube::{core::Selector, CustomResource};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -12,6 +13,9 @@ use serde::{Deserialize, Serialize};
 pub struct FleetAddonConfigSpec {
     /// Allow to patch resources, maintaining the desired state.
     pub patch_resource: Option<bool>,
+    /// Import settings for the CAPI cluster. Allows to import clusters based on a set of labels,
+    /// set on the cluster or the namespace.
+    pub selectors: Option<Selectors>,
     /// Cluster class controller settings
     pub cluster_class: Option<ClusterClassConfig>,
     /// Cluster controller settings
@@ -25,6 +29,7 @@ impl Default for FleetAddonConfig {
             spec: FleetAddonConfigSpec {
                 patch_resource: Some(true),
                 cluster_class: Some(ClusterClassConfig::default()),
+                selectors: None,
                 cluster: Some(ClusterConfig::default()),
             },
         }
@@ -106,6 +111,69 @@ impl NamingStrategy {
             Some(suffix) => name + &suffix,
             None => name,
         })
+    }
+}
+
+/// Selectors is controlling Fleet import strategy settings.
+#[derive(Serialize, Deserialize, Clone, Debug, JsonSchema, Default)]
+pub struct Selectors {
+    /// Namespace label selector. If set, only clusters in the namespace matching label selector will be imported.
+    /// WARN: this field controls the state of opened watches to the cluster. If changed, requires controller to be reloaded.
+    pub namespace: LabelSelector,
+
+    /// Cluster label selector. If set, only clusters matching label selector will be imported.
+    /// WARN: this field controls the state of opened watches to the cluster. If changed, requires controller to be reloaded.
+    pub cluster: LabelSelector,
+}
+
+impl FleetAddonConfig {
+    // Raw cluster selector
+    pub(crate) fn cluster_selector(&self) -> Selector {
+        self.spec
+            .selectors
+            .clone()
+            .unwrap_or_default()
+            .cluster
+            .into()
+    }
+
+    // Provide a static label selector for cluster objects, which can be always be set
+    // and will not cause cache events from resources in the labeled Namespace to be missed
+    pub(crate) fn cluster_watch(&self) -> Selector {
+        self.namespace_selector()
+            .selects_all()
+            .then_some(self.cluster_selector())
+            .unwrap_or_default()
+    }
+
+    // Raw namespace selector
+    pub(crate) fn namespace_selector(&self) -> Selector {
+        self.spec
+            .selectors
+            .clone()
+            .unwrap_or_default()
+            .namespace
+            .into()
+    }
+
+    // Check for general cluster operations, like create, patch, etc. Evaluates to false if disabled.
+    pub(crate) fn cluster_operations_enabled(&self) -> bool {
+        self.spec
+            .cluster
+            .iter()
+            .filter_map(|c| c.enabled)
+            .find(|&enabled| enabled)
+            .is_some()
+    }
+
+    // Check for general ClusterClass operations, like create, patch, etc. Evaluates to false if disabled.
+    pub(crate) fn cluster_class_operations_enabled(&self) -> bool {
+        self.spec
+            .cluster_class
+            .iter()
+            .filter_map(|c| c.enabled)
+            .find(|&enabled| enabled)
+            .is_some()
     }
 }
 

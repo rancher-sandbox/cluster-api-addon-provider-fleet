@@ -1,4 +1,5 @@
 use controllers::SyncError;
+use futures::channel::mpsc::TrySendError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -11,6 +12,9 @@ pub enum Error {
 
     #[error("Fleet error: {0}")]
     FleetError(#[from] SyncError),
+
+    #[error("Namespace trigger error: {0}")]
+    TriggerError(#[from] TrySendError<()>),
 
     #[error("Finalizer Error: {0}")]
     // NB: awkward type because finalizer::Error embeds the reconciler error (which is this)

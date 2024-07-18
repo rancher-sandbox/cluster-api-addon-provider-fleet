@@ -1317,7 +1317,7 @@ dependencies = [
 [[package]]
 name = "kube"
 version = "0.92.0"
-source = "git+https://github.com/Danil-Grigorev/kube.git?branch=label-selector-support#5ab3b6fa668d514a2337407161d7ced5cfc2002b"
+source = "git+https://github.com/Danil-Grigorev/kube.git?branch=label-selector-support#72660490b2ce04e975d184a01b98ce51e9d7fe6f"
 dependencies = [
  "k8s-openapi",
  "kube-client",
@@ -1329,7 +1329,7 @@ dependencies = [
 [[package]]
 name = "kube-client"
 version = "0.92.0"
-source = "git+https://github.com/Danil-Grigorev/kube.git?branch=label-selector-support#5ab3b6fa668d514a2337407161d7ced5cfc2002b"
+source = "git+https://github.com/Danil-Grigorev/kube.git?branch=label-selector-support#72660490b2ce04e975d184a01b98ce51e9d7fe6f"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -1366,7 +1366,7 @@ dependencies = [
 [[package]]
 name = "kube-core"
 version = "0.92.0"
-source = "git+https://github.com/Danil-Grigorev/kube.git?branch=label-selector-support#5ab3b6fa668d514a2337407161d7ced5cfc2002b"
+source = "git+https://github.com/Danil-Grigorev/kube.git?branch=label-selector-support#72660490b2ce04e975d184a01b98ce51e9d7fe6f"
 dependencies = [
  "chrono",
  "form_urlencoded",
@@ -1382,7 +1382,7 @@ dependencies = [
 [[package]]
 name = "kube-derive"
 version = "0.92.0"
-source = "git+https://github.com/Danil-Grigorev/kube.git?branch=label-selector-support#5ab3b6fa668d514a2337407161d7ced5cfc2002b"
+source = "git+https://github.com/Danil-Grigorev/kube.git?branch=label-selector-support#72660490b2ce04e975d184a01b98ce51e9d7fe6f"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -1394,7 +1394,7 @@ dependencies = [
 [[package]]
 name = "kube-runtime"
 version = "0.92.0"
-source = "git+https://github.com/Danil-Grigorev/kube.git?branch=label-selector-support#5ab3b6fa668d514a2337407161d7ced5cfc2002b"
+source = "git+https://github.com/Danil-Grigorev/kube.git?branch=label-selector-support#72660490b2ce04e975d184a01b98ce51e9d7fe6f"
 dependencies = [
  "ahash",
  "async-broadcast",

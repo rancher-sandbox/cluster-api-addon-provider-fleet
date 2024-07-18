@@ -74,13 +74,9 @@ impl FleetController for ClusterClass {
     type Bundle = FleetClusterClassBundle;
 
     fn to_bundle(&self, config: &FleetAddonConfig) -> Result<FleetClusterClassBundle> {
-        config
-            .spec
-            .cluster_class
-            .iter()
-            .filter_map(|c| c.enabled)
-            .find(|&enabled| enabled)
-            .ok_or(SyncError::EarlyReturn)?;
+        if !config.cluster_class_operations_enabled() {
+            Err(SyncError::EarlyReturn)?;
+        }
 
         let mut fleet_group: ClusterGroup = self.into();
         if let Some(ClusterClassConfig {

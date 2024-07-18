@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
-
 use crate::Error;
 use chrono::{DateTime, Utc};
-use kube::{runtime::events::{Recorder, Reporter}, Client, Resource, ResourceExt};
+use kube::{
+    runtime::events::{Recorder, Reporter},
+    Client, Resource, ResourceExt,
+};
 use prometheus::{histogram_opts, opts, HistogramVec, IntCounter, IntCounterVec, Registry};
 use serde::Serialize;
 use tokio::time::Instant;

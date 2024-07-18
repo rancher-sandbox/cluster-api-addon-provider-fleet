@@ -7,14 +7,20 @@ use crate::api::fleet_cluster;
 use crate::api::fleet_cluster_registration_token::{
     ClusterRegistrationToken, ClusterRegistrationTokenSpec,
 };
-use crate::Result;
+use crate::{Error, Result};
+use futures::channel::mpsc::Sender;
+use k8s_openapi::api::core::v1::Namespace;
 use kube::api::ObjectMeta;
 
+use kube::core::SelectorExt;
 use kube::{api::ResourceExt, runtime::controller::Action, Resource};
 #[cfg(feature = "agent-initiated")]
 use rand::distributions::{Alphanumeric, DistString as _};
+use tokio::sync::Mutex;
+use tracing::warn;
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use super::cluster_class::CLUSTER_CLASS_LABEL;
 use super::controller::{get_or_create, patch, Context, FleetBundle, FleetController};
@@ -134,13 +140,10 @@ impl FleetController for Cluster {
     type Bundle = FleetClusterBundle;
 
     fn to_bundle(&self, config: &FleetAddonConfig) -> Result<FleetClusterBundle> {
-        config
-            .spec
-            .cluster
-            .iter()
-            .filter_map(|c| c.enabled)
-            .find(|&enabled| enabled)
-            .ok_or(SyncError::EarlyReturn)?;
+        if !self.selector_matches(config.cluster_selector()) || !config.cluster_operations_enabled()
+        {
+            Err(SyncError::EarlyReturn)?;
+        }
 
         self.cluster_ready().ok_or(SyncError::EarlyReturn)?;
 
@@ -165,5 +168,23 @@ impl Cluster {
             .find(|&ready| ready);
 
         ready_condition.or(cp_ready).map(|_| self)
+    }
+
+    pub async fn reconcile_ns(
+        _: Arc<Namespace>,
+        invoke_reconcile: Arc<Mutex<Sender<()>>>,
+    ) -> crate::Result<Action> {
+        let mut sender = invoke_reconcile.lock().await;
+        sender.try_send(())?;
+        Ok(Action::await_change())
+    }
+
+    pub fn ns_trigger_error_policy(
+        _: Arc<impl kube::Resource>,
+        error: &Error,
+        _: Arc<Mutex<Sender<()>>>,
+    ) -> Action {
+        warn!("triggrer invocation failed: {:?}", error);
+        Action::requeue(Duration::from_secs(5))
     }
 }
