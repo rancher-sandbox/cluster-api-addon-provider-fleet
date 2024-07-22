@@ -59,7 +59,7 @@ impl FleetBundle for FleetClusterClassBundle {
             .map_err(Into::<GroupSyncError>::into)
             .map_err(Into::<SyncError>::into)?;
 
-        if let Some(true) = self.config.spec.patch_resource {
+        if self.config.cluster_class_patch_enabled() {
             patch(ctx, self.fleet_group.clone())
                 .await
                 .map_err(Into::<GroupSyncError>::into)
@@ -73,14 +73,14 @@ impl FleetBundle for FleetClusterClassBundle {
 impl FleetController for ClusterClass {
     type Bundle = FleetClusterClassBundle;
 
-    fn to_bundle(&self, config: &FleetAddonConfig) -> Result<FleetClusterClassBundle> {
-        config
-            .spec
-            .cluster_class
-            .iter()
-            .filter_map(|c| c.enabled)
-            .find(|&enabled| enabled)
-            .ok_or(SyncError::EarlyReturn)?;
+    async fn to_bundle(
+        &self,
+        _ctx: Arc<Context>,
+        config: &FleetAddonConfig,
+    ) -> Result<FleetClusterClassBundle> {
+        if !config.cluster_class_operations_enabled() {
+            Err(SyncError::EarlyReturn)?;
+        }
 
         let mut fleet_group: ClusterGroup = self.into();
         if let Some(ClusterClassConfig {

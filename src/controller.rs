@@ -1,13 +1,16 @@
 use crate::api::capi_cluster::Cluster;
 use crate::api::capi_clusterclass::ClusterClass;
+use crate::api::fleet_addon_config::FleetAddonConfig;
 use crate::api::fleet_cluster;
 use crate::api::fleet_clustergroup::ClusterGroup;
 use crate::controllers::controller::{Context, FleetController};
 use crate::metrics::Diagnostics;
 use crate::{Error, Metrics};
 
+use futures::channel::mpsc;
 use futures::StreamExt;
 
+use k8s_openapi::api::core::v1::Namespace;
 use kube::{
     api::Api,
     client::Client,
@@ -16,6 +19,7 @@ use kube::{
         watcher::Config,
     },
 };
+use tokio::sync::Mutex;
 
 use std::sync::Arc;
 use tokio::{sync::RwLock, time::Duration};
@@ -70,17 +74,61 @@ pub async fn run_cluster_controller(state: State) {
     let clusters = Api::<Cluster>::all(client.clone());
     let fleet = Api::<fleet_cluster::Cluster>::all(client.clone());
 
-    Controller::new(clusters, Config::default().any_semantic())
-        .owns(fleet, Config::default().any_semantic())
-        .shutdown_on_signal()
-        .run(
-            Cluster::reconcile,
-            error_policy,
-            state.to_context(client.clone()),
-        )
-        .filter_map(|x| async move { std::result::Result::ok(x) })
-        .for_each(|_| futures::future::ready(()))
-        .await;
+    let config_api: Api<FleetAddonConfig> = Api::all(client.clone());
+    let config = config_api
+        .get_opt("fleet-addon-config")
+        .await
+        .expect("failed to get FleetAddonConfig resource")
+        .unwrap_or_default();
+
+    let (invoke_reconcile, namespace_trigger) = mpsc::channel(0);
+    let clusters = Controller::new(
+        clusters,
+        Config::default()
+            .labels_from(
+                &config
+                    .cluster_watch()
+                    .expect("valid cluster label selector"),
+            )
+            .any_semantic(),
+    )
+    .owns(fleet, Config::default().any_semantic())
+    .reconcile_all_on(namespace_trigger)
+    .shutdown_on_signal()
+    .run(
+        Cluster::reconcile,
+        error_policy,
+        state.to_context(client.clone()),
+    )
+    .for_each(|_| futures::future::ready(()));
+
+    if config
+        .namespace_selector()
+        .expect("valid namespace selector")
+        .selects_all()
+    {
+        return clusters.await;
+    }
+
+    let ns_controller = Controller::new(
+        Api::<Namespace>::all(client.clone()),
+        Config::default()
+            .labels_from(
+                &config
+                    .namespace_selector()
+                    .expect("valid namespace selector"),
+            )
+            .any_semantic(),
+    )
+    .shutdown_on_signal()
+    .run(
+        Cluster::reconcile_ns,
+        Cluster::ns_trigger_error_policy,
+        Arc::new(Mutex::new(invoke_reconcile)),
+    )
+    .for_each(|_| futures::future::ready(()));
+
+    tokio::join!(clusters, ns_controller);
 }
 
 /// Initialize the controller and shared state (given the crd is installed)

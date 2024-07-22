@@ -161,7 +161,9 @@ where
 
         finalizer(&cluster_api, FLEET_FINALIZER, self, |event| async {
             let r = match event {
-                finalizer::Event::Apply(c) => c.to_bundle(&config)?.sync(ctx).await,
+                finalizer::Event::Apply(c) => {
+                    c.to_bundle(ctx.clone(), &config).await?.sync(ctx).await
+                }
                 finalizer::Event::Cleanup(c) => c.cleanup(ctx).await,
             };
 
@@ -193,5 +195,9 @@ where
         Ok(Action::await_change())
     }
 
-    fn to_bundle(&self, config: &FleetAddonConfig) -> crate::Result<Self::Bundle>;
+    async fn to_bundle(
+        &self,
+        ctx: Arc<Context>,
+        config: &FleetAddonConfig,
+    ) -> crate::Result<Self::Bundle>;
 }

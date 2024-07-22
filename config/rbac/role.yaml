@@ -16,6 +16,8 @@ rules:
   - namespaces
   verbs:
   - list
+  - get
+  - watch
 - apiGroups:
   - events.k8s.io
   resources:

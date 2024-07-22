@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Test
         run: just test-unit
-  test-e2e:
+  test-e2e-cluster-class:
     runs-on: ubuntu-latest
     steps:
       - name: Install just
@@ -42,5 +42,26 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: artifacts
+          name: artifacts-cluster-class-import
+          path: _out/gather
+  test-e2e-import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install just
+        uses: extractions/setup-just@v2
+      - name: Install kind
+        uses: helm/kind-action@v1
+        with:
+          install_only: true
+      - uses: actions/checkout@v4
+      - name: Test
+        run: just test-import
+      - name: Collect artifacts
+        if: always()
+        run: just collect-test-import
+      - name: Store run artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: artifacts-import
           path: _out/gather
