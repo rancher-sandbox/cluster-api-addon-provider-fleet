@@ -78,6 +78,10 @@ pub struct ClusterConfig {
     /// Namespace selection for the fleet agent
     pub agent_namespace: Option<String>,
 
+    /// Host network allows to deploy agent configuration using hostNetwork: true setting
+    /// which eludes dependency on the CNI configuration for the cluster.
+    pub host_network: Option<bool>,
+
     /// Import settings for the CAPI cluster. Allows to import clusters based on a set of labels,
     /// set on the cluster or the namespace.
     #[serde(flatten)]
@@ -124,6 +128,7 @@ impl Default for ClusterConfig {
             set_owner_references: Some(true),
             naming: Default::default(),
             agent_namespace: AGENT_NAMESPACE.to_string().into(),
+            host_network: Some(true),
             #[cfg(feature = "agent-initiated")]
             agent_initiated: Some(true),
             selectors: Default::default(),

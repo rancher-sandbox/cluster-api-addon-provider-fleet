@@ -5,8 +5,11 @@ metadata:
 spec:
   clusterClass:
     patchResource: true
+    setOwnerReferences: true
   cluster:
     patchResource: true
+    setOwnerReferences: true
+    hostNetwork: true
     selector:
       matchLabels:
         import: ""
