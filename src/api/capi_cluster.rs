@@ -256,8 +256,19 @@ pub struct ClusterTopologyControlPlaneMachineHealthCheck {
     /// "selector" are not healthy.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "maxUnhealthy")]
     pub max_unhealthy: Option<IntOrString>,
-    /// Machines older than this duration without a node will be considered to have
-    /// failed and will be remediated.
+    /// NodeStartupTimeout allows to set the maximum time for MachineHealthCheck
+    /// to consider a Machine unhealthy if a corresponding Node isn't associated
+    /// through a `Spec.ProviderID` field.
+    /// 
+    /// 
+    /// The duration set in this field is compared to the greatest of:
+    /// - Cluster's infrastructure ready condition timestamp (if and when available)
+    /// - Control Plane's initialized condition timestamp (if and when available)
+    /// - Machine's infrastructure ready condition timestamp (if and when available)
+    /// - Machine's metadata creation timestamp
+    /// 
+    /// 
+    /// Defaults to 10 minutes.
     /// If you wish to disable this feature, set the value explicitly to 0.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "nodeStartupTimeout")]
     pub node_startup_timeout: Option<String>,
@@ -371,10 +382,10 @@ pub struct ClusterTopologyControlPlaneVariables {
 /// Variable definition in the ClusterClass `status` variables.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, JsonSchema)]
 pub struct ClusterTopologyControlPlaneVariablesOverrides {
-    /// DefinitionFrom specifies where the definition of this Variable is from. DefinitionFrom is `inline` when the
-    /// definition is from the ClusterClass `.spec.variables` or the name of a patch defined in the ClusterClass
-    /// `.spec.patches` where the patch is external and provides external variables.
-    /// This field is mandatory if the variable has `DefinitionsConflict: true` in ClusterClass `status.variables[]`
+    /// DefinitionFrom specifies where the definition of this Variable is from.
+    /// 
+    /// 
+    /// Deprecated: This field is deprecated, must not be set anymore and is going to be removed in the next apiVersion.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "definitionFrom")]
     pub definition_from: Option<String>,
     /// Name of the variable.
@@ -393,10 +404,10 @@ pub struct ClusterTopologyControlPlaneVariablesOverrides {
 /// Variable definition in the ClusterClass `status` variables.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, JsonSchema)]
 pub struct ClusterTopologyVariables {
-    /// DefinitionFrom specifies where the definition of this Variable is from. DefinitionFrom is `inline` when the
-    /// definition is from the ClusterClass `.spec.variables` or the name of a patch defined in the ClusterClass
-    /// `.spec.patches` where the patch is external and provides external variables.
-    /// This field is mandatory if the variable has `DefinitionsConflict: true` in ClusterClass `status.variables[]`
+    /// DefinitionFrom specifies where the definition of this Variable is from.
+    /// 
+    /// 
+    /// Deprecated: This field is deprecated, must not be set anymore and is going to be removed in the next apiVersion.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "definitionFrom")]
     pub definition_from: Option<String>,
     /// Name of the variable.
@@ -505,8 +516,19 @@ pub struct ClusterTopologyWorkersMachineDeploymentsMachineHealthCheck {
     /// "selector" are not healthy.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "maxUnhealthy")]
     pub max_unhealthy: Option<IntOrString>,
-    /// Machines older than this duration without a node will be considered to have
-    /// failed and will be remediated.
+    /// NodeStartupTimeout allows to set the maximum time for MachineHealthCheck
+    /// to consider a Machine unhealthy if a corresponding Node isn't associated
+    /// through a `Spec.ProviderID` field.
+    /// 
+    /// 
+    /// The duration set in this field is compared to the greatest of:
+    /// - Cluster's infrastructure ready condition timestamp (if and when available)
+    /// - Control Plane's initialized condition timestamp (if and when available)
+    /// - Machine's infrastructure ready condition timestamp (if and when available)
+    /// - Machine's metadata creation timestamp
+    /// 
+    /// 
+    /// Defaults to 10 minutes.
     /// If you wish to disable this feature, set the value explicitly to 0.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "nodeStartupTimeout")]
     pub node_startup_timeout: Option<String>,
@@ -610,6 +632,10 @@ pub struct ClusterTopologyWorkersMachineDeploymentsMetadata {
 /// new ones.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, JsonSchema)]
 pub struct ClusterTopologyWorkersMachineDeploymentsStrategy {
+    /// Remediation controls the strategy of remediating unhealthy machines
+    /// and how remediating operations should occur during the lifecycle of the dependant MachineSets.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remediation: Option<ClusterTopologyWorkersMachineDeploymentsStrategyRemediation>,
     /// Rolling update config params. Present only if
     /// MachineDeploymentStrategyType = RollingUpdate.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "rollingUpdate")]
@@ -618,6 +644,32 @@ pub struct ClusterTopologyWorkersMachineDeploymentsStrategy {
     /// The default is RollingUpdate.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "type")]
     pub r#type: Option<ClusterTopologyWorkersMachineDeploymentsStrategyType>,
+}
+
+/// Remediation controls the strategy of remediating unhealthy machines
+/// and how remediating operations should occur during the lifecycle of the dependant MachineSets.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, JsonSchema)]
+pub struct ClusterTopologyWorkersMachineDeploymentsStrategyRemediation {
+    /// MaxInFlight determines how many in flight remediations should happen at the same time.
+    /// 
+    /// 
+    /// Remediation only happens on the MachineSet with the most current revision, while
+    /// older MachineSets (usually present during rollout operations) aren't allowed to remediate.
+    /// 
+    /// 
+    /// Note: In general (independent of remediations), unhealthy machines are always
+    /// prioritized during scale down operations over healthy ones.
+    /// 
+    /// 
+    /// MaxInFlight can be set to a fixed number or a percentage.
+    /// Example: when this is set to 20%, the MachineSet controller deletes at most 20% of
+    /// the desired replicas.
+    /// 
+    /// 
+    /// If not set, remediation is limited to all machines (bounded by replicas)
+    /// under the active MachineSet's management.
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "maxInFlight")]
+    pub max_in_flight: Option<IntOrString>,
 }
 
 /// Rolling update config params. Present only if
@@ -689,10 +741,10 @@ pub struct ClusterTopologyWorkersMachineDeploymentsVariables {
 /// Variable definition in the ClusterClass `status` variables.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, JsonSchema)]
 pub struct ClusterTopologyWorkersMachineDeploymentsVariablesOverrides {
-    /// DefinitionFrom specifies where the definition of this Variable is from. DefinitionFrom is `inline` when the
-    /// definition is from the ClusterClass `.spec.variables` or the name of a patch defined in the ClusterClass
-    /// `.spec.patches` where the patch is external and provides external variables.
-    /// This field is mandatory if the variable has `DefinitionsConflict: true` in ClusterClass `status.variables[]`
+    /// DefinitionFrom specifies where the definition of this Variable is from.
+    /// 
+    /// 
+    /// Deprecated: This field is deprecated, must not be set anymore and is going to be removed in the next apiVersion.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "definitionFrom")]
     pub definition_from: Option<String>,
     /// Name of the variable.
@@ -789,10 +841,10 @@ pub struct ClusterTopologyWorkersMachinePoolsVariables {
 /// Variable definition in the ClusterClass `status` variables.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, JsonSchema)]
 pub struct ClusterTopologyWorkersMachinePoolsVariablesOverrides {
-    /// DefinitionFrom specifies where the definition of this Variable is from. DefinitionFrom is `inline` when the
-    /// definition is from the ClusterClass `.spec.variables` or the name of a patch defined in the ClusterClass
-    /// `.spec.patches` where the patch is external and provides external variables.
-    /// This field is mandatory if the variable has `DefinitionsConflict: true` in ClusterClass `status.variables[]`
+    /// DefinitionFrom specifies where the definition of this Variable is from.
+    /// 
+    /// 
+    /// Deprecated: This field is deprecated, must not be set anymore and is going to be removed in the next apiVersion.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "definitionFrom")]
     pub definition_from: Option<String>,
     /// Name of the variable.
