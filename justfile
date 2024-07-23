@@ -181,10 +181,10 @@ _test-import-all:
     just deploy-child-cluster-class
     just deploy-crs
     kubectl wait pods --for=condition=Ready --timeout=150s --all --all-namespaces
-    kubectl wait clustergroups.fleet.cattle.io --timeout=150s --for=jsonpath='{.status.clusterCount}=1' quick-start -n cluster-class-test
-    kubectl wait clustergroups.fleet.cattle.io --timeout=150s --for=condition=Ready=true quick-start -n cluster-class-test
-    kubectl wait clusters.fleet.cattle.io --timeout=150s --for=condition=Ready=false capi-quickstart -n cluster-class-test
-    kubectl wait clusters.fleet.cattle.io --timeout=150s --for=condition=Ready=true capi-quickstart -n cluster-class-test
+    kubectl wait clustergroups.fleet.cattle.io --timeout=150s --for=jsonpath='{.status.clusterCount}=1' quick-start
+    kubectl wait clustergroups.fleet.cattle.io --timeout=150s --for=condition=Ready=true quick-start
+    kubectl wait clusters.fleet.cattle.io --timeout=150s --for=condition=Ready=false capi-quickstart
+    kubectl wait clusters.fleet.cattle.io --timeout=150s --for=condition=Ready=true capi-quickstart
 
 # Install kopium
 [private]
