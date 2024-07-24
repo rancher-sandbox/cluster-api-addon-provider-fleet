@@ -37,8 +37,8 @@ kubectl config view -o json --raw | jq -r '.clusters[] | select(.name=="kind-dev
 # Set the API server URL
 API_SERVER_URL=`kubectl config view -o json --raw | jq -r '.clusters[] | select(.name=="kind-dev").cluster["server"]'`
 # And proceed with the installation via helm
-helm -n cattle-fleet-system install --create-namespace --wait fleet-crd fleet/fleet-crd
-helm install --create-namespace -n cattle-fleet-system --set apiServerURL=$API_SERVER_URL --set-file apiServerCA=_out/ca.pem fleet fleet/fleet --wait
+helm -n cattle-fleet-system install --version v0.10.1-rc.1 --create-namespace --wait fleet-crd fleet/fleet-crd
+helm install --create-namespace --version v0.10.1-rc.1 -n cattle-fleet-system --set apiServerURL=$API_SERVER_URL --set-file apiServerCA=_out/ca.pem fleet fleet/fleet --wait
 ```
 5. Install CAPI with the required experimental features enabled and initialized the Docker provider for testing.
 ```

@@ -38,6 +38,10 @@ pub struct ClusterSpec {
     /// either be predefined, or generated when importing the cluster.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "clientID")]
     pub client_id: Option<String>,
+    /// HostNetwork sets the agent StatefulSet to use hostNetwork: true setting.
+    /// Allows for provisioning of network related bundles (CNI configuration).
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "hostNetwork")]
+    pub host_network: Option<bool>,
     /// KubeConfigSecret is the name of the secret containing the kubeconfig for the downstream cluster.
     /// It can optionally contain a APIServerURL and CA to override the
     /// values in the fleet-controller's configmap.
@@ -952,6 +956,9 @@ pub struct ClusterStatus {
     /// AgentEnvVarsHash is a hash of the agent's env vars, used to detect changes.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "agentEnvVarsHash")]
     pub agent_env_vars_hash: Option<String>,
+    /// AgentHostNetwork defines observed state of spec.hostNetwork setting that is currently used.
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "agentHostNetwork")]
+    pub agent_host_network: Option<bool>,
     /// AgentMigrated is always set to true after importing a cluster. If
     /// false, it will trigger a migration. Old agents don't have
     /// this in their status.

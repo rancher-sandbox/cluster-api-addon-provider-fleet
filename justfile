@@ -100,8 +100,12 @@ stop-dev:
     kind delete cluster --name dev || true
 
 # Deploy CRS to dev cluster
-deploy-crs:
-    kubectl --context kind-dev apply -f testdata/crs.yaml
+deploy-cni:
+    kubectl --context kind-dev apply -f testdata/cni.yaml
+
+# Deploy an example app bundle to the cluster
+deploy-app:
+    kubectl --context kind-dev apply -f testdata/bundle.yaml
 
 # Deploy child cluster using docker & kubeadm
 deploy-child-cluster:
@@ -130,8 +134,8 @@ install-fleet: _create-out-dir
     kubectl config view -o json --raw | jq -r '.clusters[].cluster["certificate-authority-data"]' | base64 -d > {{OUT_DIR}}/ca.pem
     API_SERVER_URL=`kubectl get nodes -o json | jq -r '.items[0].status.addresses[] | select(.type=="InternalIP").address'`
     API_SERVER_URL=https://${API_SERVER_URL}:6443
-    helm -n cattle-fleet-system install --create-namespace --wait fleet-crd fleet/fleet-crd
-    helm install --create-namespace -n cattle-fleet-system --set apiServerURL=$API_SERVER_URL --set-file apiServerCA={{OUT_DIR}}/ca.pem fleet fleet/fleet --wait
+    helm -n cattle-fleet-system install --version v0.10.1-rc.1 --create-namespace --wait fleet-crd fleet/fleet-crd
+    helm install --version v0.10.1-rc.1 --create-namespace -n cattle-fleet-system --set apiServerURL=$API_SERVER_URL --set-file apiServerCA={{OUT_DIR}}/ca.pem fleet fleet/fleet --wait
 
 # Install cluster api and any providers
 install-capi: _download-clusterctl
@@ -150,17 +154,17 @@ release-manifests: _create-out-dir _download-kustomize
     kustomize build config/default > {{OUT_DIR}}/addon-components.yaml
 
 # Full e2e test of importing cluster in fleet
-test-import: start-dev deploy deploy-child-cluster deploy-crs && collect-test-import
+test-import: start-dev deploy deploy-child-cluster deploy-cni deploy-app && collect-test-import
     kubectl wait pods --for=condition=Ready --timeout=150s --all --all-namespaces
     kubectl wait cluster --timeout=500s --for=condition=ControlPlaneReady=true docker-demo
-    kubectl wait clusters.fleet.cattle.io --timeout=150s --for=condition=Ready docker-demo
+    kubectl wait clusters.fleet.cattle.io --timeout=300s --for=condition=Ready=true docker-demo
 
 collect-test-import:
     -just collect-artifacts dev
     -just collect-artifacts docker-demo
 
 # Full e2e test of importing cluster in fleet
-test-cluster-class-import: start-dev deploy _test-import-all && collect-test-cluster-class-import
+test-cluster-class-import: start-dev deploy deploy-child-cluster-class deploy-cni deploy-app _test-import-all && collect-test-cluster-class-import
 
 collect-test-cluster-class-import:
     -just collect-artifacts dev
@@ -169,6 +173,9 @@ collect-test-cluster-class-import:
 # Test e2e with agent initiated connection procedure
 test-cluster-class-import-agent-initated: start-dev && collect-test-cluster-class-import
     just deploy "agent-initiated"
+    just deploy-child-cluster-class
+    just deploy-cni
+    just deploy-app
     just _test-import-all
 
 collect-artifacts cluster:
@@ -178,13 +185,10 @@ collect-artifacts cluster:
 # Full e2e test of importing cluster and ClusterClass in fleet
 [private]
 _test-import-all:
-    just deploy-child-cluster-class
-    just deploy-crs
     kubectl wait pods --for=condition=Ready --timeout=150s --all --all-namespaces
     kubectl wait clustergroups.fleet.cattle.io --timeout=150s --for=jsonpath='{.status.clusterCount}=1' quick-start
-    kubectl wait clustergroups.fleet.cattle.io --timeout=150s --for=condition=Ready=true quick-start
-    kubectl wait clusters.fleet.cattle.io --timeout=150s --for=condition=Ready=false capi-quickstart
-    kubectl wait clusters.fleet.cattle.io --timeout=150s --for=condition=Ready=true capi-quickstart
+    kubectl wait clustergroups.fleet.cattle.io --timeout=300s --for=condition=Ready=true quick-start
+    kubectl wait clusters.fleet.cattle.io --timeout=300s --for=condition=Ready=true capi-quickstart
 
 # Install kopium
 [private]

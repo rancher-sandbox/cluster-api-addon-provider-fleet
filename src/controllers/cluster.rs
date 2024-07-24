@@ -1,7 +1,7 @@
 use crate::api::capi_cluster::{Cluster, ClusterTopology};
 
 use crate::api::fleet_addon_config::{ClusterConfig, FleetAddonConfig};
-use crate::api::fleet_cluster;
+use crate::api::fleet_cluster::{self, ClusterAgentTolerations};
 
 #[cfg(feature = "agent-initiated")]
 use crate::api::fleet_cluster_registration_token::{
@@ -58,6 +58,13 @@ impl Cluster {
             None | Some(ClusterTopology { .. }) => self.labels().clone(),
         };
 
+        let agent_tolerations = Some(vec![ClusterAgentTolerations{
+            effect: Some("NoSchedule".into()),
+            operator: Some("Equal".into()),
+            key: Some("node.kubernetes.io/not-ready".into()),
+            ..Default::default()
+        }]);
+
         fleet_cluster::Cluster {
             metadata: ObjectMeta {
                 labels: Some(labels),
@@ -73,11 +80,15 @@ impl Cluster {
                 true => fleet_cluster::ClusterSpec {
                     client_id: Some(Alphanumeric.sample_string(&mut rand::thread_rng(), 64)),
                     agent_namespace: config.agent_install_namespace().into(),
+                    host_network: config.host_network,
+                    agent_tolerations,
                     ..Default::default()
                 },
                 false => fleet_cluster::ClusterSpec {
                     kube_config_secret: Some(format!("{}-kubeconfig", self.name_any())),
                     agent_namespace: config.agent_install_namespace().into(),
+                    host_network: config.host_network,
+                    agent_tolerations,
                     ..Default::default()
                 },
             },
@@ -85,6 +96,8 @@ impl Cluster {
             spec: fleet_cluster::ClusterSpec {
                 kube_config_secret: Some(format!("{}-kubeconfig", self.name_any())),
                 agent_namespace: config.agent_install_namespace().into(),
+                host_network: config.host_network,
+                agent_tolerations,
                 ..Default::default()
             },
             status: Default::default(),

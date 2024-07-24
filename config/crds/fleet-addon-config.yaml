@@ -32,6 +32,10 @@ spec:
                     description: Namespace selection for the fleet agent
                     nullable: true
                     type: string
+                  hostNetwork:
+                    description: 'Host network allows to deploy agent configuration using hostNetwork: true setting which eludes dependency on the CNI configuration for the cluster.'
+                    nullable: true
+                    type: boolean
                   namespaceSelector:
                     description: 'Namespace label selector. If set, only clusters in the namespace matching label selector will be imported. WARN: this field controls the state of opened watches to the cluster. If changed, requires controller to be reloaded.'
                     properties:
