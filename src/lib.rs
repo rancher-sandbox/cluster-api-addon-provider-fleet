@@ -38,6 +38,7 @@ pub mod controller;
 pub use crate::controller::*;
 pub mod api;
 pub mod controllers;
+pub mod predicates;
 
 /// Log and trace integrations
 pub mod telemetry;

@@ -58,7 +58,7 @@ impl Cluster {
             None | Some(ClusterTopology { .. }) => self.labels().clone(),
         };
 
-        let agent_tolerations = Some(vec![ClusterAgentTolerations{
+        let agent_tolerations = Some(vec![ClusterAgentTolerations {
             effect: Some("NoSchedule".into()),
             operator: Some("Equal".into()),
             key: Some("node.kubernetes.io/not-ready".into()),
@@ -207,7 +207,7 @@ impl Cluster {
     }
 
     pub async fn reconcile_ns(
-        _: Arc<Namespace>,
+        _: Arc<impl Resource>,
         invoke_reconcile: Arc<Mutex<Sender<()>>>,
     ) -> crate::Result<Action> {
         let mut sender = invoke_reconcile.lock().await;
