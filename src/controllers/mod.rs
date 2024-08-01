@@ -13,10 +13,9 @@ pub enum SyncError {
 
     #[error("Cluster registration token create error {0}")]
     ClusterRegistrationTokenSync(#[from] GetOrCreateError),
-
-    #[error("Return early")]
-    EarlyReturn,
 }
+
+pub type ClusterSyncResult<T, E = ClusterSyncError> = std::result::Result<T, E>;
 
 #[derive(Error, Debug)]
 pub enum ClusterSyncError {
@@ -27,6 +26,8 @@ pub enum ClusterSyncError {
     PatchError(#[from] PatchError),
 }
 
+pub type GroupSyncResult<T, E = GroupSyncError> = std::result::Result<T, E>;
+
 #[derive(Error, Debug)]
 pub enum GroupSyncError {
     #[error("Cluster group create error: {0}")]
@@ -35,6 +36,8 @@ pub enum GroupSyncError {
     #[error("Cluster group update error: {0}")]
     PatchError(#[from] PatchError),
 }
+
+pub type GetOrCreateResult<T, E = GetOrCreateError> = std::result::Result<T, E>;
 
 #[derive(Error, Debug)]
 pub enum GetOrCreateError {
@@ -48,6 +51,8 @@ pub enum GetOrCreateError {
     Event(#[from] kube::Error),
 }
 
+pub type LabelCheckResult<T, E = LabelCheckError> = std::result::Result<T, E>;
+
 #[derive(Error, Debug)]
 pub enum LabelCheckError {
     #[error("Namespace lookup error: {0}")]
@@ -57,6 +62,8 @@ pub enum LabelCheckError {
     Expression(#[from] kube::core::ParseExpressionError),
 }
 
+pub type PatchResult<T, E = PatchError> = std::result::Result<T, E>;
+
 #[derive(Error, Debug)]
 pub enum PatchError {
     #[error("Patch error: {0}")]
@@ -64,6 +71,25 @@ pub enum PatchError {
 
     #[error("Diagnostics error: {0}")]
     Event(#[from] kube::Error),
+}
+
+pub type BundleResult<T, E = BundleError> = std::result::Result<T, E>;
+
+#[derive(Error, Debug)]
+pub enum BundleError {
+    #[error("Label Check error: {0}")]
+    LabelCheck(#[from] LabelCheckError),
+
+    #[error("{0}")]
+    Config(#[from] ConfigFetchError),
+}
+
+pub type ConfigFetchResult<T> = std::result::Result<T, ConfigFetchError>;
+
+#[derive(Error, Debug)]
+pub enum ConfigFetchError {
+    #[error("Config lookup error: {0}")]
+    Lookup(#[from] kube::Error),
 }
 
 pub mod cluster;
