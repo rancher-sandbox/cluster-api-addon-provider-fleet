@@ -2,7 +2,6 @@ use crate::api::capi_clusterclass::ClusterClass;
 
 use crate::api::fleet_addon_config::{ClusterClassConfig, FleetAddonConfig};
 use crate::api::fleet_clustergroup::{ClusterGroup, ClusterGroupSelector, ClusterGroupSpec};
-use crate::Result;
 
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use kube::api::ObjectMeta;
@@ -11,8 +10,10 @@ use kube::{api::ResourceExt, runtime::controller::Action, Resource};
 
 use std::sync::Arc;
 
-use super::controller::{get_or_create, patch, Context, FleetBundle, FleetController};
-use super::{GroupSyncError, SyncError};
+use super::controller::{
+    fetch_config, get_or_create, patch, Context, FleetBundle, FleetController,
+};
+use super::{BundleResult, GroupSyncResult};
 
 pub static CLUSTER_CLASS_LABEL: &str = "clusterclass-name.fleet.addons.cluster.x-k8s.io";
 
@@ -53,18 +54,11 @@ impl From<&ClusterClass> for ClusterGroup {
 }
 
 impl FleetBundle for FleetClusterClassBundle {
-    async fn sync(&self, ctx: Arc<Context>) -> Result<Action> {
-        get_or_create(ctx.clone(), self.fleet_group.clone())
-            .await
-            .map_err(Into::<GroupSyncError>::into)
-            .map_err(Into::<SyncError>::into)?;
-
-        if self.config.cluster_class_patch_enabled() {
-            patch(ctx, self.fleet_group.clone())
-                .await
-                .map_err(Into::<GroupSyncError>::into)
-                .map_err(Into::<SyncError>::into)?;
-        }
+    async fn sync(&self, ctx: Arc<Context>) -> GroupSyncResult<Action> {
+        match self.config.cluster_class_patch_enabled() {
+            true => patch(ctx, self.fleet_group.clone()).await?,
+            false => get_or_create(ctx.clone(), self.fleet_group.clone()).await?,
+        };
 
         Ok(Action::await_change())
     }
@@ -73,13 +67,10 @@ impl FleetBundle for FleetClusterClassBundle {
 impl FleetController for ClusterClass {
     type Bundle = FleetClusterClassBundle;
 
-    async fn to_bundle(
-        &self,
-        _ctx: Arc<Context>,
-        config: &FleetAddonConfig,
-    ) -> Result<FleetClusterClassBundle> {
+    async fn to_bundle(&self, ctx: Arc<Context>) -> BundleResult<Option<FleetClusterClassBundle>> {
+        let config = fetch_config(ctx.clone().client.clone()).await?;
         if !config.cluster_class_operations_enabled() {
-            Err(SyncError::EarlyReturn)?;
+            return Ok(None);
         }
 
         let mut fleet_group: ClusterGroup = self.into();
@@ -92,9 +83,9 @@ impl FleetController for ClusterClass {
             fleet_group.metadata.owner_references = None
         }
 
-        Ok(FleetClusterClassBundle {
+        Ok(Some(FleetClusterClassBundle {
             fleet_group,
-            config: config.clone(),
-        })
+            config,
+        }))
     }
 }

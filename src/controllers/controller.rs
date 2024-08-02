@@ -20,7 +20,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{self, debug, info, instrument};
 
-use super::{GetOrCreateError, SyncError};
+use super::{
+    BundleResult, ConfigFetchResult, GetOrCreateError, GetOrCreateResult, PatchResult, SyncError,
+};
 
 pub static FLEET_FINALIZER: &str = "fleet.addons.cluster.x-k8s.io";
 
@@ -35,7 +37,7 @@ pub struct Context {
     pub metrics: Metrics,
 }
 
-pub(crate) async fn get_or_create<R>(ctx: Arc<Context>, res: R) -> Result<Action, GetOrCreateError>
+pub(crate) async fn get_or_create<R>(ctx: Arc<Context>, res: R) -> GetOrCreateResult<Action>
 where
     R: std::fmt::Debug,
     R: Clone + Serialize + DeserializeOwned,
@@ -47,7 +49,7 @@ where
         .namespace
         .clone()
         .unwrap_or(String::from("default"));
-    let api: Api<R> = Api::namespaced(ctx.client.clone(), &ns);
+    let api = Api::namespaced(ctx.client.clone(), &ns);
 
     let obj = api
         .get_metadata_opt(res.name_any().as_str())
@@ -79,13 +81,12 @@ where
             action: "Creating".into(),
             secondary: None,
         })
-        .await
-        .map_err(GetOrCreateError::Event)?;
+        .await?;
 
     Ok(Action::await_change())
 }
 
-pub(crate) async fn patch<R>(ctx: Arc<Context>, res: R) -> Result<Action, PatchError>
+pub(crate) async fn patch<R>(ctx: Arc<Context>, res: R) -> PatchResult<Action>
 where
     R: std::fmt::Debug,
     R: Clone + Serialize + DeserializeOwned,
@@ -124,14 +125,20 @@ where
             action: "Creating".into(),
             secondary: None,
         })
-        .await
-        .map_err(PatchError::Event)?;
+        .await?;
 
     Ok(Action::await_change())
 }
 
+pub(crate) async fn fetch_config(client: Client) -> ConfigFetchResult<FleetAddonConfig> {
+    Ok(Api::all(client)
+        .get_opt("fleet-addon-config")
+        .await?
+        .unwrap_or_default())
+}
+
 pub(crate) trait FleetBundle {
-    async fn sync(&self, ctx: Arc<Context>) -> crate::Result<Action>;
+    async fn sync(&self, ctx: Arc<Context>) -> Result<Action, impl Into<SyncError>>;
 }
 
 pub(crate) trait FleetController
@@ -143,34 +150,25 @@ where
 {
     type Bundle: FleetBundle;
 
-    #[instrument(skip_all, fields(trace_id = display(telemetry::get_trace_id()), name = self.name_any(), namespace = self.namespace()))]
+    #[instrument(skip_all, fields(trace_id = display(telemetry::get_trace_id()), name = self.name_any(), namespace = self.namespace()), err)]
     async fn reconcile(self: Arc<Self>, ctx: Arc<Context>) -> crate::Result<Action> {
-        let name = self.name_any();
-        let namespace = self.namespace().unwrap_or_default();
         ctx.diagnostics.write().await.last_event = Utc::now();
 
-        let config_api: Api<FleetAddonConfig> = Api::all(ctx.client.clone());
-        let config = config_api
-            .get_opt("fleet-addon-config")
-            .await
-            .map_err(Error::ConfigFetch)?
-            .unwrap_or_default();
+        let namespace = self.namespace().unwrap_or_default();
+        let api = Api::namespaced(ctx.client.clone(), namespace.as_str());
+        debug!("Reconciling");
 
-        let cluster_api: Api<Self> = Api::namespaced(ctx.client.clone(), namespace.as_str());
-        debug!("Reconciling \"{}\" in {}", name, namespace);
-
-        finalizer(&cluster_api, FLEET_FINALIZER, self, |event| async {
-            let r = match event {
-                finalizer::Event::Apply(c) => {
-                    c.to_bundle(ctx.clone(), &config).await?.sync(ctx).await
-                }
+        finalizer(&api, FLEET_FINALIZER, self, |event| async {
+            match event {
+                finalizer::Event::Apply(c) => match c.to_bundle(ctx.clone()).await? {
+                    Some(bundle) => bundle
+                        .sync(ctx)
+                        .await
+                        .map_err(Into::into)
+                        .map_err(Into::into),
+                    _ => Ok(Action::await_change()),
+                },
                 finalizer::Event::Cleanup(c) => c.cleanup(ctx).await,
-            };
-
-            match r {
-                Ok(r) => Ok(r),
-                Err(Error::FleetError(SyncError::EarlyReturn)) => Ok(Action::await_change()),
-                Err(e) => Err(e),
             }
         })
         .await
@@ -195,9 +193,5 @@ where
         Ok(Action::await_change())
     }
 
-    async fn to_bundle(
-        &self,
-        ctx: Arc<Context>,
-        config: &FleetAddonConfig,
-    ) -> crate::Result<Self::Bundle>;
+    async fn to_bundle(&self, ctx: Arc<Context>) -> BundleResult<Option<Self::Bundle>>;
 }

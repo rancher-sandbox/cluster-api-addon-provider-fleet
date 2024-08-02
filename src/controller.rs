@@ -1,9 +1,8 @@
 use crate::api::capi_cluster::Cluster;
 use crate::api::capi_clusterclass::ClusterClass;
-use crate::api::fleet_addon_config::FleetAddonConfig;
 use crate::api::fleet_cluster;
 use crate::api::fleet_clustergroup::ClusterGroup;
-use crate::controllers::controller::{Context, FleetController};
+use crate::controllers::controller::{fetch_config, Context, FleetController};
 use crate::metrics::Diagnostics;
 use crate::{Error, Metrics};
 
@@ -77,12 +76,9 @@ pub async fn run_cluster_controller(state: State) {
         .await
         .expect("failed to create kube Client");
 
-    let config_api: Api<FleetAddonConfig> = Api::all(client.clone());
-    let config = config_api
-        .get_opt("fleet-addon-config")
+    let config = fetch_config(client.clone())
         .await
-        .expect("failed to get FleetAddonConfig resource")
-        .unwrap_or_default();
+        .expect("failed to get FleetAddonConfig resource");
 
     let (reader, writer) = reflector::store();
     let clusters = watcher(
