@@ -1,4 +1,4 @@
-use controllers::SyncError;
+use controllers::{BundleError, SyncError};
 use futures::channel::mpsc::TrySendError;
 use thiserror::Error;
 
@@ -9,6 +9,9 @@ pub enum Error {
 
     #[error("Config fetch error: {0}")]
     ConfigFetch(#[source] kube::Error),
+
+    #[error("Bundle error: {0}")]
+    BundleError(#[from] BundleError),
 
     #[error("Fleet error: {0}")]
     FleetError(#[from] SyncError),
