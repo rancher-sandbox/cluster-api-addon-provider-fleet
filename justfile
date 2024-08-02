@@ -1,5 +1,5 @@
 NAME := "cluster-api-fleet-controller"
-KUBE_VERSION := env_var_or_default('KUBE_VERSION', '1.26.3')
+KUBE_VERSION := env_var_or_default('KUBE_VERSION', '1.30.0')
 ORG := "ghcr.io/rancher-sandbox"
 TAG := "dev"
 HOME_DIR := env_var('HOME')
@@ -135,7 +135,7 @@ install-fleet: _create-out-dir
     API_SERVER_URL=`kubectl get nodes -o json | jq -r '.items[0].status.addresses[] | select(.type=="InternalIP").address'`
     API_SERVER_URL=https://${API_SERVER_URL}:6443
     helm -n cattle-fleet-system install --version v0.10.1-rc.1 --create-namespace --wait fleet-crd fleet/fleet-crd
-    helm install --version v0.10.1-rc.1 --create-namespace -n cattle-fleet-system --set apiServerURL=$API_SERVER_URL --set-file apiServerCA={{OUT_DIR}}/ca.pem fleet fleet/fleet --wait
+    helm install --version v0.10.1-rc.1 --create-namespace -n cattle-fleet-system --set bootstrap.enabled=false --set apiServerURL=$API_SERVER_URL --set-file apiServerCA={{OUT_DIR}}/ca.pem fleet fleet/fleet --wait
 
 # Install cluster api and any providers
 install-capi: _download-clusterctl

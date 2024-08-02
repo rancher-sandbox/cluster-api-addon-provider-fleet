@@ -218,7 +218,7 @@ impl FleetAddonConfig {
     // Check for general clusterClass patching setting.
     pub(crate) fn cluster_class_patch_enabled(&self) -> bool {
         self.spec
-            .cluster
+            .cluster_class
             .as_ref()
             .map(|c| c.patch_resource)
             .unwrap_or_default()

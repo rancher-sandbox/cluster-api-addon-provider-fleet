@@ -7,7 +7,7 @@ use crate::api::fleet_cluster::{self, ClusterAgentTolerations};
 use crate::api::fleet_cluster_registration_token::{
     ClusterRegistrationToken, ClusterRegistrationTokenSpec,
 };
-use crate::{Error, Result};
+use crate::Error;
 use futures::channel::mpsc::Sender;
 use k8s_openapi::api::core::v1::Namespace;
 use kube::api::ObjectMeta;
@@ -24,8 +24,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use super::cluster_class::CLUSTER_CLASS_LABEL;
-use super::controller::{get_or_create, patch, Context, FleetBundle, FleetController};
-use super::{ClusterSyncError, LabelCheckError, SyncError};
+use super::controller::{
+    fetch_config, get_or_create, patch, Context, FleetBundle, FleetController,
+};
+use super::{BundleResult, ClusterSyncResult, LabelCheckResult};
 
 pub static CONTROLPLANE_READY_CONDITION: &str = "ControlPlaneReady";
 
@@ -58,7 +60,7 @@ impl Cluster {
             None | Some(ClusterTopology { .. }) => self.labels().clone(),
         };
 
-        let agent_tolerations = Some(vec![ClusterAgentTolerations{
+        let agent_tolerations = Some(vec![ClusterAgentTolerations {
             effect: Some("NoSchedule".into()),
             operator: Some("Equal".into()),
             key: Some("node.kubernetes.io/not-ready".into()),
@@ -123,28 +125,16 @@ impl Cluster {
 }
 
 impl FleetBundle for FleetClusterBundle {
-    async fn sync(&self, ctx: Arc<Context>) -> Result<Action> {
-        get_or_create(ctx.clone(), self.fleet.clone())
-            .await
-            .map_err(Into::<ClusterSyncError>::into)
-            .map_err(Into::<SyncError>::into)?;
-
-        if self.config.cluster_patch_enabled() {
-            patch(ctx.clone(), self.fleet.clone())
-                .await
-                .map_err(Into::<ClusterSyncError>::into)
-                .map_err(Into::<SyncError>::into)?;
-        }
+    async fn sync(&self, ctx: Arc<Context>) -> ClusterSyncResult<Action> {
+        match self.config.cluster_patch_enabled() {
+            true => patch(ctx.clone(), self.fleet.clone()).await?,
+            false => get_or_create(ctx.clone(), self.fleet.clone()).await?,
+        };
 
         #[cfg(feature = "agent-initiated")]
-        get_or_create(
-            ctx,
-            self.cluster_registration_token
-                .clone()
-                .ok_or(SyncError::EarlyReturn)?,
-        )
-        .await
-        .map_err(Into::<crate::SyncError>::into)?;
+        if let Some(cluster_registration_token) = self.cluster_registration_token.clone() {
+            get_or_create(ctx, cluster_registration_token).await?;
+        }
 
         Ok(Action::await_change())
     }
@@ -153,29 +143,24 @@ impl FleetBundle for FleetClusterBundle {
 impl FleetController for Cluster {
     type Bundle = FleetClusterBundle;
 
-    async fn to_bundle(
-        &self,
-        ctx: Arc<Context>,
-        config: &FleetAddonConfig,
-    ) -> Result<FleetClusterBundle> {
-        let matching_labels = self
-            .matching_labels(config, ctx.client.clone())
-            .await
-            .map_err(Into::<SyncError>::into)?;
-
+    async fn to_bundle(&self, ctx: Arc<Context>) -> BundleResult<Option<FleetClusterBundle>> {
+        let config = fetch_config(ctx.clone().client.clone()).await?;
+        let matching_labels = self.matching_labels(&config, ctx.client.clone()).await?;
         if !matching_labels || !config.cluster_operations_enabled() {
-            Err(SyncError::EarlyReturn)?;
+            return Ok(None);
         }
 
-        self.cluster_ready().ok_or(SyncError::EarlyReturn)?;
+        if self.cluster_ready().is_none() {
+            return Ok(None);
+        }
 
-        Ok(FleetClusterBundle {
+        Ok(Some(FleetClusterBundle {
             fleet: self.to_cluster(config.spec.cluster.clone()),
             #[cfg(feature = "agent-initiated")]
             cluster_registration_token: self
                 .to_cluster_registration_token(config.spec.cluster.clone()),
-            config: config.clone(),
-        })
+            config,
+        }))
     }
 }
 
@@ -183,11 +168,9 @@ impl Cluster {
     pub fn cluster_ready(&self) -> Option<&Self> {
         let status = self.status.clone()?;
         let cp_ready = status.control_plane_ready.filter(|&ready| ready);
-        let ready_condition = status
-            .conditions?
-            .iter()
-            .map(|c| c.type_ == CONTROLPLANE_READY_CONDITION && c.status == "True")
-            .find(|&ready| ready);
+        let ready_condition = status.conditions?.iter().find_map(|c| {
+            (c.type_ == CONTROLPLANE_READY_CONDITION && c.status == "True").then_some(true)
+        });
 
         ready_condition.or(cp_ready).map(|_| self)
     }
@@ -196,7 +179,7 @@ impl Cluster {
         &self,
         config: &FleetAddonConfig,
         client: Client,
-    ) -> Result<bool, LabelCheckError> {
+    ) -> LabelCheckResult<bool> {
         let matches = config.cluster_selector()?.matches(self.labels()) || {
             let ns = self.namespace().unwrap_or("default".into());
             let namespace: Namespace = Api::all(client).get(ns.as_str()).await?;
@@ -207,7 +190,7 @@ impl Cluster {
     }
 
     pub async fn reconcile_ns(
-        _: Arc<Namespace>,
+        _: Arc<impl Resource>,
         invoke_reconcile: Arc<Mutex<Sender<()>>>,
     ) -> crate::Result<Action> {
         let mut sender = invoke_reconcile.lock().await;
