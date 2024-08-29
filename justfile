@@ -134,8 +134,8 @@ install-fleet: _create-out-dir
     kubectl config view -o json --raw | jq -r '.clusters[].cluster["certificate-authority-data"]' | base64 -d > {{OUT_DIR}}/ca.pem
     API_SERVER_URL=`kubectl get nodes -o json | jq -r '.items[0].status.addresses[] | select(.type=="InternalIP").address'`
     API_SERVER_URL=https://${API_SERVER_URL}:6443
-    helm -n cattle-fleet-system install --version v0.10.1-rc.1 --create-namespace --wait fleet-crd fleet/fleet-crd
-    helm install --version v0.10.1-rc.1 --create-namespace -n cattle-fleet-system --set bootstrap.enabled=false --set apiServerURL=$API_SERVER_URL --set-file apiServerCA={{OUT_DIR}}/ca.pem fleet fleet/fleet --wait
+    helm -n cattle-fleet-system install --version v0.10.1 --create-namespace --wait fleet-crd fleet/fleet-crd
+    helm install --version v0.10.1 --create-namespace -n cattle-fleet-system --set bootstrap.enabled=false --set apiServerURL=$API_SERVER_URL --set-file apiServerCA={{OUT_DIR}}/ca.pem fleet fleet/fleet --wait
 
 # Install cluster api and any providers
 install-capi: _download-clusterctl
