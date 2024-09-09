@@ -1,4 +1,4 @@
-use controllers::{BundleError, SyncError};
+use controllers::{addon_config::AddonConfigSyncError, BundleError, SyncError};
 use futures::channel::mpsc::TrySendError;
 use thiserror::Error;
 
@@ -15,6 +15,9 @@ pub enum Error {
 
     #[error("Fleet error: {0}")]
     FleetError(#[from] SyncError),
+
+    #[error("Fleet config error: {0}")]
+    FleetConfigError(#[from] AddonConfigSyncError),
 
     #[error("Namespace trigger error: {0}")]
     TriggerError(#[from] TrySendError<()>),

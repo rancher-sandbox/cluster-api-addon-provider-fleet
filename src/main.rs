@@ -30,6 +30,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Init k8s controller state
     let state = State::new();
+    let fleet_config_controller = controller::run_fleet_addon_config_controller(state.clone());
     let cluster_controller = controller::run_cluster_controller(state.clone());
     let cluster_class_controller = controller::run_cluster_class_controller(state.clone());
 
@@ -46,6 +47,12 @@ async fn main() -> anyhow::Result<()> {
     .shutdown_timeout(5)
     .run();
 
-    tokio::join!(cluster_controller, cluster_class_controller, server).2?;
+    tokio::join!(
+        cluster_controller,
+        cluster_class_controller,
+        fleet_config_controller,
+        server
+    )
+    .3?;
     Ok(())
 }

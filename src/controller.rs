@@ -1,5 +1,6 @@
 use crate::api::capi_cluster::Cluster;
 use crate::api::capi_clusterclass::ClusterClass;
+use crate::api::fleet_addon_config::FleetAddonConfig;
 use crate::api::fleet_cluster;
 use crate::api::fleet_clustergroup::ClusterGroup;
 use crate::controllers::controller::{fetch_config, Context, FleetController};
@@ -68,6 +69,22 @@ impl State {
             diagnostics: self.diagnostics.clone(),
         })
     }
+}
+
+pub async fn run_fleet_addon_config_controller(state: State) {
+    let client = Client::try_default()
+        .await
+        .expect("failed to create kube Client");
+    let api: Api<FleetAddonConfig> = Api::all(client.clone());
+    let fleet_addon_config_controller = Controller::new(api, watcher::Config::default())
+        .run(
+            FleetAddonConfig::reconcile,
+            error_policy,
+            state.to_context(client.clone()),
+        )
+        .for_each(|_| futures::future::ready(()));
+
+    tokio::join!(fleet_addon_config_controller);
 }
 
 /// Initialize the controller and shared state (given the crd is installed)
