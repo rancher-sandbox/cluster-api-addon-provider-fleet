@@ -1,4 +1,6 @@
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::LabelSelector;
+use k8s_openapi::{
+    api::core::v1::ObjectReference, apimachinery::pkg::apis::meta::v1::LabelSelector,
+};
 use kube::{
     core::{ParseExpressionError, Selector},
     CustomResource,
@@ -13,7 +15,8 @@ pub const AGENT_NAMESPACE: &str = "fleet-addon-agent";
 #[kube(
     kind = "FleetAddonConfig",
     group = "addons.cluster.x-k8s.io",
-    version = "v1alpha1"
+    version = "v1alpha1",
+    status = "FleetAddonConfigStatus"
 )]
 #[serde(rename_all = "camelCase")]
 pub struct FleetAddonConfigSpec {
@@ -28,6 +31,9 @@ pub struct FleetAddonConfigSpec {
     /// In case the cluster specifies topology.class, the name of the ClusterClass
     /// will be added to the Fleet Cluster labels.
     pub cluster: Option<ClusterConfig>,
+
+    // Fleet chart installation options
+    pub config: Option<FleetConfig>,
 }
 
 impl Default for FleetAddonConfig {
@@ -37,9 +43,16 @@ impl Default for FleetAddonConfig {
             spec: FleetAddonConfigSpec {
                 cluster_class: Some(ClusterClassConfig::default()),
                 cluster: Some(ClusterConfig::default()),
+                config: None,
             },
+            status: Default::default(),
         }
     }
+}
+
+#[derive(Deserialize, Serialize, Clone, Default, Debug, JsonSchema)]
+pub struct FleetAddonConfigStatus {
+    pub installed_version: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, JsonSchema)]
@@ -137,6 +150,26 @@ impl Default for ClusterConfig {
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FleetConfig {
+    pub server: Server
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum Server {
+    InferLocal(bool),
+    Custom(InstallOptions),
+}
+
+#[derive(Clone, Default, Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallOptions {
+    pub api_server_ca_config_ref: Option<ObjectReference>,
+    pub api_server_url: Option<String>,
+}
+
 impl NamingStrategy {
     pub fn apply(&self, name: Option<String>) -> Option<String> {
         name.map(|name| match &self.prefix {
@@ -144,7 +177,7 @@ impl NamingStrategy {
             None => name,
         })
         .map(|name| match &self.suffix {
-            Some(suffix) => name + &suffix,
+            Some(suffix) => name + suffix,
             None => name,
         })
     }

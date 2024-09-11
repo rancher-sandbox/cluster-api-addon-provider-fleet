@@ -92,6 +92,7 @@ pub enum ConfigFetchError {
     Lookup(#[from] kube::Error),
 }
 
+pub mod addon_config;
 pub mod cluster;
 pub mod cluster_class;
 pub mod cluster_group;

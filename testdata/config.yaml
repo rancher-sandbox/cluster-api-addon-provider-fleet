@@ -3,6 +3,9 @@ kind: FleetAddonConfig
 metadata:
   name: fleet-addon-config
 spec:
+  config:
+    server:
+      inferLocal: true
   clusterClass:
     patchResource: true
     setOwnerReferences: true
