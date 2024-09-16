@@ -1,6 +1,8 @@
-use std::process::{Child, Command};
+use std::process::{Child, Command, Stdio};
 
-use super::{FleetCRDInstallResult, FleetInstallResult, RepoAddResult};
+use serde::Deserialize;
+
+use super::{FleetCRDInstallResult, FleetInstallResult, MetadataGetResult, RepoAddResult};
 
 #[derive(Default)]
 pub struct FleetChart {
@@ -14,6 +16,14 @@ pub struct FleetChart {
     pub bootstrap_local_cluster: bool,
 }
 
+#[derive(Deserialize)]
+pub struct ChartInfo {
+    pub name: String,
+    pub namespace: String,
+    pub app_version: String,
+    pub status: String,
+}
+
 impl FleetChart {
     pub fn add_repo(&self) -> RepoAddResult<Child> {
         Ok(Command::new("helm")
@@ -21,10 +31,30 @@ impl FleetChart {
             .spawn()?)
     }
 
-    pub fn install_fleet(&self) -> FleetInstallResult<Child> {
+    pub fn get_metadata(&self, chart: &str) -> MetadataGetResult<Option<ChartInfo>> {
+        let mut metadata = Command::new("helm");
+        metadata.args(["list", "-A", "-o", "json"]);
+
+        let run = metadata
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+        let result = run.wait_with_output()?;
+        let error = String::from_utf8(result.stderr)?;
+        if result.status.code() == Some(1) && &error == "Error: release: not found" {
+            return Ok(None);
+        }
+
+        let output = &String::from_utf8(result.stdout)?;
+        let infos: Vec<ChartInfo> = serde_json::from_str(output)?;
+
+        Ok(infos.into_iter().find(|i| i.name == chart))
+    }
+
+    pub fn fleet(&self, operation: &str) -> FleetInstallResult<Child> {
         let mut install = Command::new("helm");
 
-        install.args(["install", "fleet", "fleet/fleet"]);
+        install.args([operation, "fleet", "fleet/fleet"]);
 
         if self.create_namespace {
             install.arg("--create-namespace");
@@ -50,10 +80,10 @@ impl FleetChart {
         Ok(install.spawn()?)
     }
 
-    pub fn install_fleet_crds(&self) -> FleetCRDInstallResult<Child> {
+    pub fn fleet_crds(&self, operation: &str) -> FleetCRDInstallResult<Child> {
         let mut install = Command::new("helm");
 
-        install.args(["install", "fleet-crd", "fleet/fleet-crd"]);
+        install.args([operation, "fleet-crd", "fleet/fleet-crd"]);
 
         if self.create_namespace {
             install.arg("--create-namespace");

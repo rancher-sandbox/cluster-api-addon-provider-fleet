@@ -189,7 +189,7 @@ spec:
           status:
             nullable: true
             properties:
-              installed_version:
+              installedVersion:
                 nullable: true
                 type: string
             type: object

@@ -26,4 +26,18 @@ pub enum RepoAddError {
     RepoAdd(#[from] io::Error),
 }
 
+pub type MetadataGetResult<T> = std::result::Result<T, MetadataGetError>;
+
+#[derive(Error, Debug)]
+pub enum MetadataGetError {
+    #[error("Metadata get error: {0}")]
+    MetadataGet(#[from] io::Error),
+
+    #[error("Decode error: {0}")]
+    UTF8Error(#[from] std::string::FromUtf8Error),
+
+    #[error("Deserialize info error: {0}")]
+    DeserializeInfoError(#[from] serde_json::Error),
+}
+
 pub mod install;

@@ -51,6 +51,7 @@ impl Default for FleetAddonConfig {
 }
 
 #[derive(Deserialize, Serialize, Clone, Default, Debug, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct FleetAddonConfigStatus {
     pub installed_version: Option<String>,
 }
@@ -153,7 +154,7 @@ impl Default for ClusterConfig {
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct FleetConfig {
-    pub server: Server
+    pub server: Server,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]

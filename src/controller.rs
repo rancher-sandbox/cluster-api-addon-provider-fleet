@@ -7,10 +7,12 @@ use crate::controllers::controller::{fetch_config, Context, FleetController};
 use crate::metrics::Diagnostics;
 use crate::{Error, Metrics};
 
+use clap::Parser;
 use futures::channel::mpsc;
 use futures::StreamExt;
 
 use k8s_openapi::api::core::v1::Namespace;
+use kube::config::AuthInfo;
 use kube::runtime::{metadata_watcher, predicates, reflector, watcher, WatchStreamExt};
 use kube::ResourceExt as _;
 use kube::{
@@ -38,6 +40,16 @@ pub struct State {
     /// Metrics registry
     registry: prometheus::Registry,
     metrics: Metrics,
+
+    /// Additional flags for controller
+    pub flags: Flags,
+}
+
+#[derive(Parser, Debug, Clone, Default)]
+pub struct Flags {
+    /// helm install allows to select container for performing fleet chart installation
+    #[arg(long)]
+    pub helm_install: bool,
 }
 
 /// State wrapper around the controller outputs for the web server
@@ -47,6 +59,7 @@ impl State {
         Self {
             metrics: Metrics::default().register(&registry).unwrap(),
             registry,
+            flags: Flags::parse(),
             ..Default::default()
         }
     }
@@ -78,12 +91,26 @@ pub async fn run_fleet_addon_config_controller(state: State) {
     let api: Api<FleetAddonConfig> = Api::all(client.clone());
     let fleet_addon_config_controller = Controller::new(api, watcher::Config::default())
         .run(
-            FleetAddonConfig::reconcile,
+            FleetAddonConfig::reconcile_config_sync,
             error_policy,
             state.to_context(client.clone()),
         )
         .for_each(|_| futures::future::ready(()));
+    tokio::join!(fleet_addon_config_controller);
+}
 
+pub async fn run_fleet_helm_controller(state: State) {
+    let client = Client::try_default()
+        .await
+        .expect("failed to create kube Client");
+    let api: Api<FleetAddonConfig> = Api::all(client.clone());
+    let fleet_addon_config_controller = Controller::new(api, watcher::Config::default())
+        .run(
+            FleetAddonConfig::reconcile_helm,
+            error_policy,
+            state.to_context(client.clone()),
+        )
+        .for_each(|_| futures::future::ready(()));
     tokio::join!(fleet_addon_config_controller);
 }
 
@@ -244,5 +271,5 @@ pub async fn run_cluster_class_controller(state: State) {
 fn error_policy(doc: Arc<impl kube::Resource>, error: &Error, ctx: Arc<Context>) -> Action {
     warn!("reconcile failed: {:?}", error);
     ctx.metrics.reconcile_failure(doc, error);
-    Action::requeue(Duration::from_secs(5 * 60))
+    Action::requeue(Duration::from_secs(10))
 }

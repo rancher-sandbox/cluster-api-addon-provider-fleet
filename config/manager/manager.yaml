@@ -24,14 +24,18 @@ spec:
       labels:
         control-plane: controller-manager
     spec:
-      # securityContext:
-      #   runAsNonRoot: true
       containers:
+        - name: helm-manager
+          image: controller:latest
+          args:
+            - --helm-install
+          volumeMounts:
+          - name: helm-kubeconfig
+            readOnly: true
+            mountPath: /var/run/secrets/kubernetes.io/serviceaccount
         - image: controller:latest
           imagePullPolicy: Always
           name: manager
-          # securityContext:
-          #   allowPrivilegeEscalation: false
           ports:
             - containerPort: 8443
               name: http
@@ -53,3 +57,7 @@ spec:
           #     memory: 64Mi
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10
+      volumes:
+      - name: helm-kubeconfig
+        secret:
+          secretName: caapf-helm-manager

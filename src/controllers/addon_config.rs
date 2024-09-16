@@ -82,33 +82,35 @@ struct CertData {
 
 impl FleetAddonConfig {
     #[instrument(skip_all, fields(trace_id = display(telemetry::get_trace_id()), name = self.name_any(), namespace = self.namespace()))]
-    pub async fn reconcile(self: Arc<Self>, ctx: Arc<Context>) -> crate::Result<Action> {
-        self.reconcile_config_sync(ctx).await.map_err(Into::into)
+    pub async fn reconcile_helm(self: Arc<Self>, ctx: Arc<Context>) -> crate::Result<Action> {
+        if self.name_any() != "fleet-addon-config" {
+            return Ok(Action::await_change());
+        }
+
+        self.install_fleet(
+            ctx.clone(),
+            FleetChart {
+                repo: "https://rancher.github.io/fleet-helm-charts/".into(),
+                namespace: "cattle-fleet-system".into(),
+                version: Default::default(),
+                wait: true,
+                update_dependency: true,
+                create_namespace: true,
+                bootstrap_local_cluster: false,
+            },
+        )
+        .await?;
+
+        return Ok(Action::await_change());
     }
 
     #[instrument(skip_all, fields(trace_id = display(telemetry::get_trace_id()), name = self.name_any(), namespace = self.namespace()))]
     pub async fn reconcile_config_sync(
         self: Arc<Self>,
         ctx: Arc<Context>,
-    ) -> AddonConfigSyncResult<Action> {
+    ) -> crate::Result<Action> {
         if self.name_any() != "fleet-addon-config" {
             return Ok(Action::await_change());
-        }
-
-        if let None = self.status.clone().unwrap_or_default().installed_version {
-            self.install_fleet(
-                ctx.clone(),
-                FleetChart {
-                    repo: "https://rancher.github.io/fleet-helm-charts/".into(),
-                    namespace: "cattle-fleet-system".into(),
-                    version: Default::default(),
-                    wait: true,
-                    update_dependency: true,
-                    create_namespace: true,
-                    bootstrap_local_cluster: false,
-                },
-            )
-            .await?;
         }
 
         let ns = Namespace::from("cattle-fleet-system");
@@ -121,7 +123,7 @@ impl FleetAddonConfig {
                 .await?;
         }
 
-        fleet_config.managed_fields_mut().clear();
+        fleet_config.meta_mut().managed_fields = None;
         fleet_config.types = Some(TypeMeta::resource::<FleetConfig>());
 
         let api: Api<FleetConfig> = Api::namespaced(ctx.client.clone(), "cattle-fleet-system");
@@ -208,18 +210,41 @@ impl FleetAddonConfig {
         ctx: Arc<Context>,
         chart: FleetChart,
     ) -> AddonConfigSyncResult<Action> {
-        chart.add_repo()?.wait()?;
-        chart.install_fleet_crds()?.wait()?;
-        chart.install_fleet()?.wait()?;
-
-        let api: Api<Self> = Api::all(ctx.client.clone());
         let mut config = self.clone();
         let mut status = config.status.unwrap_or_default();
 
-        status.installed_version = Some("".into());
-        config.status = Some(status);
-        config.managed_fields_mut().clear();
+        chart.add_repo()?.wait()?;
+        config.metadata.managed_fields = None;
 
+        match chart.get_metadata("fleet")? {
+            Some(repo) if chart.version.is_empty() || chart.version != repo.app_version => {
+                status.installed_version = Some(repo.app_version)
+            }
+            Some(_) => {
+                chart.fleet("upgrade")?.wait()?;
+                let info = chart.get_metadata("fleet")?;
+                status.installed_version = info.map(|i| i.app_version);
+            }
+            None => {
+                chart.fleet("install")?.wait()?;
+                let info = chart.get_metadata("fleet")?;
+                status.installed_version = info.map(|i| i.app_version);
+            }
+        };
+
+        match chart.get_metadata("fleet-crd")? {
+            Some(repo) if chart.version.is_empty() || chart.version != repo.app_version => {
+                chart.fleet_crds("upgrade")?.wait()?;
+            }
+            Some(_) => (),
+            None => {
+                chart.fleet_crds("install")?.wait()?;
+            }
+        };
+
+        config.status = Some(status);
+
+        let api: Api<Self> = Api::all(ctx.client.clone());
         api.patch_status(
             &self.name_any(),
             &PatchParams::apply("fleet-addon-controller").force(),
@@ -246,6 +271,9 @@ pub enum AddonConfigSyncError {
 
     #[error("Fleet repo add error: {0}")]
     RepoAdd(#[from] helm::RepoAddError),
+
+    #[error("Fleet metadata check error: {0}")]
+    MetadataGet(#[from] helm::MetadataGetError),
 
     #[error("Error waiting for command: {0}")]
     CommandError(#[from] io::Error),
