@@ -101,7 +101,7 @@ where
     let api: Api<R> = Api::namespaced(ctx.client.clone(), &ns);
 
     let mut res = res.clone();
-    res.managed_fields_mut().clear();
+    res.meta_mut().managed_fields = None;
 
     api.patch(
         &res.name_any(),
