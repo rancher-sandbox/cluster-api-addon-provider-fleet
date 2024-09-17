@@ -1,8 +1,9 @@
 use crate::api::capi_clusterclass::ClusterClass;
 
 use crate::api::fleet_addon_config::{ClusterClassConfig, FleetAddonConfig};
-use crate::api::fleet_clustergroup::{ClusterGroup, ClusterGroupSelector, ClusterGroupSpec};
+use crate::api::fleet_clustergroup::ClusterGroup;
 
+use fleet_api_rs::fleet_clustergroup::{ClusterGroupSelector, ClusterGroupSpec};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use kube::api::ObjectMeta;
 
@@ -47,7 +48,7 @@ impl From<&ClusterClass> for ClusterGroup {
                     ),
                     ..Default::default()
                 }),
-            },
+            }.into(),
             status: Default::default(),
         }
     }

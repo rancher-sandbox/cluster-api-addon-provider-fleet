@@ -20,15 +20,6 @@ default:
 # Generates stuff
 generate features="":
     just generate-addon-crds {{features}}
-    just generate-crds
-
-# generates files for CRDS
-generate-crds: _create-out-dir _install-kopium _download-yq
-    just _generate-kopium-url kopium "https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/main/config/crd/bases/cluster.x-k8s.io_clusters.yaml" "src/api/capi_cluster.rs" ""
-    just _generate-kopium-url kopium "https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/main/config/crd/bases/cluster.x-k8s.io_clusterclasses.yaml" "src/api/capi_clusterclass.rs" ""
-    just _generate-kopium-url kopium "https://raw.githubusercontent.com/rancher/fleet/main/charts/fleet-crd/templates/crds.yaml" "src/api/fleet_cluster.rs" "select(.spec.names.singular==\"cluster\")" "--no-condition"
-    just _generate-kopium-url kopium "https://raw.githubusercontent.com/rancher/fleet/main/charts/fleet-crd/templates/crds.yaml" "src/api/fleet_clustergroup.rs" "select(.spec.names.singular==\"clustergroup\")" "--no-condition"
-    just _generate-kopium-url kopium "https://raw.githubusercontent.com/rancher/fleet/main/charts/fleet-crd/templates/crds.yaml" "src/api/fleet_cluster_registration_token.rs" "select(.spec.names.singular==\"clusterregistrationtoken\")" ""
 
 [private]
 _generate-kopium-url kpath="" source="" dest="" yqexp="." condition="":

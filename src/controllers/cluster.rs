@@ -1,13 +1,13 @@
-use crate::api::capi_cluster::{Cluster, ClusterTopology};
+use crate::api::capi_cluster::Cluster;
 
 use crate::api::fleet_addon_config::{ClusterConfig, FleetAddonConfig};
-use crate::api::fleet_cluster::{self, ClusterAgentTolerations};
+use crate::api::fleet_cluster::{self};
 
 #[cfg(feature = "agent-initiated")]
-use crate::api::fleet_cluster_registration_token::{
-    ClusterRegistrationToken, ClusterRegistrationTokenSpec,
-};
+use crate::api::fleet_cluster_registration_token::ClusterRegistrationToken;
 use crate::Error;
+use cluster_api_rs::capi_cluster::ClusterTopology;
+use fleet_api_rs::fleet_cluster::{ClusterAgentTolerations, ClusterSpec};
 use futures::channel::mpsc::Sender;
 use k8s_openapi::api::core::v1::Namespace;
 use kube::api::ObjectMeta;
@@ -51,7 +51,7 @@ impl From<&Cluster> for ObjectMeta {
 impl Cluster {
     fn to_cluster(self: &Cluster, config: Option<ClusterConfig>) -> fleet_cluster::Cluster {
         let config = config.unwrap_or_default();
-        let labels = match &self.spec.topology {
+        let labels = match &self.spec.proxy.topology {
             Some(ClusterTopology { class, .. }) if !class.is_empty() => {
                 let mut labels = self.labels().clone();
                 labels.insert(CLUSTER_CLASS_LABEL.to_string(), class.clone());
@@ -79,29 +79,32 @@ impl Cluster {
             },
             #[cfg(feature = "agent-initiated")]
             spec: match config.agent_initiated_connection() {
-                true => fleet_cluster::ClusterSpec {
+                true => ClusterSpec {
                     client_id: Some(Alphanumeric.sample_string(&mut rand::thread_rng(), 64)),
                     agent_namespace: config.agent_install_namespace().into(),
                     host_network: config.host_network,
                     agent_tolerations,
                     ..Default::default()
-                },
-                false => fleet_cluster::ClusterSpec {
+                }
+                .into(),
+                false => ClusterSpec {
                     kube_config_secret: Some(format!("{}-kubeconfig", self.name_any())),
                     agent_namespace: config.agent_install_namespace().into(),
                     host_network: config.host_network,
                     agent_tolerations,
                     ..Default::default()
-                },
+                }
+                .into(),
             },
             #[cfg(not(feature = "agent-initiated"))]
-            spec: fleet_cluster::ClusterSpec {
+            spec: ClusterSpec {
                 kube_config_secret: Some(format!("{}-kubeconfig", self.name_any())),
                 agent_namespace: config.agent_install_namespace().into(),
                 host_network: config.host_network,
                 agent_tolerations,
                 ..Default::default()
-            },
+            }
+            .into(),
             status: Default::default(),
         }
     }
@@ -111,13 +114,16 @@ impl Cluster {
         self: &Cluster,
         config: Option<ClusterConfig>,
     ) -> Option<ClusterRegistrationToken> {
+        use fleet_api_rs::fleet_cluster_registration_token::ClusterRegistrationTokenSpec;
+
         config?.agent_initiated?.then_some(true)?;
 
         ClusterRegistrationToken {
             metadata: self.into(),
             spec: ClusterRegistrationTokenSpec {
                 ttl: Some("1h".into()),
-            },
+            }
+            .into(),
             ..Default::default()
         }
         .into()

@@ -60,6 +60,8 @@ thiserror = "1.0.62"
 anyhow = "1.0.86"
 base64 = "0.22.1"
 clap = { version = "4.5.17", features = ["derive"] }
+cluster-api-rs = "1.8.3"
+fleet-api-rs = "0.10.2"
 
 [dev-dependencies]
 assert-json-diff = "2.0.2"
