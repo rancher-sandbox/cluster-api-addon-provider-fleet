@@ -12,7 +12,6 @@ use futures::channel::mpsc;
 use futures::StreamExt;
 
 use k8s_openapi::api::core::v1::Namespace;
-use kube::config::AuthInfo;
 use kube::runtime::{metadata_watcher, predicates, reflector, watcher, WatchStreamExt};
 use kube::ResourceExt as _;
 use kube::{

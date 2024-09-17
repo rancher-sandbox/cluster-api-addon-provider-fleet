@@ -19,4 +19,6 @@ spec:
     namespaceSelector:
       matchLabels:
         import: ""
+  install:
+    followLatest: true
 

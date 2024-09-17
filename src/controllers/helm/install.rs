@@ -2,12 +2,17 @@ use std::process::{Child, Command, Stdio};
 
 use serde::Deserialize;
 
-use super::{FleetCRDInstallResult, FleetInstallResult, MetadataGetResult, RepoAddResult};
+use crate::api::fleet_addon_config::Install;
+
+use super::{
+    FleetCRDInstallResult, FleetInstallResult, MetadataGetResult, RepoAddResult, RepoSearchResult,
+    RepoUpdateResult,
+};
 
 #[derive(Default)]
 pub struct FleetChart {
     pub repo: String,
-    pub version: String,
+    pub version: Install,
     pub namespace: String,
 
     pub wait: bool,
@@ -24,11 +29,34 @@ pub struct ChartInfo {
     pub status: String,
 }
 
+#[derive(Deserialize)]
+pub struct ChartSearch {
+    pub name: String,
+    pub app_version: String,
+}
+
 impl FleetChart {
     pub fn add_repo(&self) -> RepoAddResult<Child> {
         Ok(Command::new("helm")
             .args(["repo", "add", "fleet", &self.repo])
             .spawn()?)
+    }
+
+    pub fn update_repo(&self) -> RepoUpdateResult<Child> {
+        Ok(Command::new("helm")
+            .args(["repo", "update", "fleet"])
+            .spawn()?)
+    }
+
+    pub fn search_repo(&self) -> RepoSearchResult<Vec<ChartSearch>> {
+        let result = Command::new("helm")
+            .stdout(Stdio::piped())
+            .args(["search", "repo", "fleet", "-o", "json"])
+            .spawn()?
+            .wait_with_output()?;
+
+        let output = &String::from_utf8(result.stdout)?;
+        Ok(serde_json::from_str(output)?)
     }
 
     pub fn get_metadata(&self, chart: &str) -> MetadataGetResult<Option<ChartInfo>> {
@@ -60,12 +88,15 @@ impl FleetChart {
             install.arg("--create-namespace");
         }
 
-        if self.namespace.len() > 0 {
+        if !self.namespace.is_empty() {
             install.args(["--namespace", &self.namespace]);
         }
 
-        if self.version.len() > 0 {
-            install.args(["--version", &self.version]);
+        match self.version.clone() {
+            Install::FollowLatest(_) => {}
+            Install::Version(version) => {
+                install.args(["--version", &version]);
+            }
         }
 
         if self.wait {
@@ -89,11 +120,16 @@ impl FleetChart {
             install.arg("--create-namespace");
         }
 
-        if self.namespace.len() > 0 {
+        if !self.namespace.is_empty() {
             install.args(["--namespace", &self.namespace]);
         }
 
-        install.args(["--version", &self.version]);
+        match self.version.clone() {
+            Install::FollowLatest(_) => {}
+            Install::Version(version) => {
+                install.args(["--version", &version]);
+            }
+        }
 
         if self.wait {
             install.arg("--wait");

@@ -26,6 +26,28 @@ pub enum RepoAddError {
     RepoAdd(#[from] io::Error),
 }
 
+pub type RepoUpdateResult<T> = std::result::Result<T, RepoUpdateError>;
+
+#[derive(Error, Debug)]
+pub enum RepoUpdateError {
+    #[error("Fleet repo update error: {0}")]
+    RepoUpdate(#[from] io::Error),
+}
+
+pub type RepoSearchResult<T> = std::result::Result<T, RepoSearchError>;
+
+#[derive(Error, Debug)]
+pub enum RepoSearchError {
+    #[error("Fleet repo search error: {0}")]
+    RepoSearch(#[from] io::Error),
+
+    #[error("Decode error: {0}")]
+    UTF8Error(#[from] std::string::FromUtf8Error),
+
+    #[error("Deserialize search error: {0}")]
+    DeserializeInfoError(#[from] serde_json::Error),
+}
+
 pub type MetadataGetResult<T> = std::result::Result<T, MetadataGetError>;
 
 #[derive(Error, Debug)]
