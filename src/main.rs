@@ -30,29 +30,39 @@ async fn main() -> anyhow::Result<()> {
 
     // Init k8s controller state
     let state = State::new();
-    let fleet_config_controller = controller::run_fleet_addon_config_controller(state.clone());
-    let cluster_controller = controller::run_cluster_controller(state.clone());
-    let cluster_class_controller = controller::run_cluster_class_controller(state.clone());
 
-    // Start web server
-    let server = HttpServer::new(move || {
-        App::new()
-            .app_data(Data::new(state.clone()))
-            .wrap(middleware::Logger::default().exclude("/health"))
-            .service(index)
-            .service(health)
-            .service(metrics)
-    })
-    .bind("0.0.0.0:8443")?
-    .shutdown_timeout(5)
-    .run();
+    match state.flags.helm_install {
+        true => {
+            let helm_install_controller = controller::run_fleet_helm_controller(state.clone());
+            tokio::join!(helm_install_controller);
+        }
+        false => {
+            let fleet_config_controller =
+                controller::run_fleet_addon_config_controller(state.clone());
+            let cluster_controller = controller::run_cluster_controller(state.clone());
+            let cluster_class_controller = controller::run_cluster_class_controller(state.clone());
 
-    tokio::join!(
-        cluster_controller,
-        cluster_class_controller,
-        fleet_config_controller,
-        server
-    )
-    .3?;
+            // Start web server
+            let server = HttpServer::new(move || {
+                App::new()
+                    .app_data(Data::new(state.clone()))
+                    .wrap(middleware::Logger::default().exclude("/health"))
+                    .service(index)
+                    .service(health)
+                    .service(metrics)
+            })
+            .bind("0.0.0.0:8443")?
+            .shutdown_timeout(5)
+            .run();
+
+            tokio::join!(
+                cluster_controller,
+                cluster_class_controller,
+                fleet_config_controller,
+                server
+            )
+            .3?;
+        }
+    };
     Ok(())
 }

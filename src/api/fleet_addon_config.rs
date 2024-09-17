@@ -32,8 +32,11 @@ pub struct FleetAddonConfigSpec {
     /// will be added to the Fleet Cluster labels.
     pub cluster: Option<ClusterConfig>,
 
-    // Fleet chart installation options
+    // Fleet chart configuratoin options
     pub config: Option<FleetConfig>,
+
+    // Fleet chart installation options
+    pub install: Option<FleetInstall>,
 }
 
 impl Default for FleetAddonConfig {
@@ -43,7 +46,7 @@ impl Default for FleetAddonConfig {
             spec: FleetAddonConfigSpec {
                 cluster_class: Some(ClusterClassConfig::default()),
                 cluster: Some(ClusterConfig::default()),
-                config: None,
+                ..Default::default()
             },
             status: Default::default(),
         }
@@ -51,6 +54,7 @@ impl Default for FleetAddonConfig {
 }
 
 #[derive(Deserialize, Serialize, Clone, Default, Debug, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct FleetAddonConfigStatus {
     pub installed_version: Option<String>,
 }
@@ -153,7 +157,31 @@ impl Default for ClusterConfig {
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct FleetConfig {
-    pub server: Server
+    pub server: Server,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FleetInstall {
+    /// Chart version to install
+    #[serde(flatten)]
+    pub install_version: Install,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum Install {
+    /// Follow the latest version of the chart on install
+    FollowLatest(bool),
+
+    /// Use specific version to install
+    Version(String),
+}
+
+impl Default for Install {
+    fn default() -> Self {
+        Self::FollowLatest(true)
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]

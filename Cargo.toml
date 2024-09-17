@@ -59,6 +59,7 @@ tonic = { version = "0.12", optional = true }
 thiserror = "1.0.62"
 anyhow = "1.0.86"
 base64 = "0.22.1"
+clap = { version = "4.5.17", features = ["derive"] }
 
 [dev-dependencies]
 assert-json-diff = "2.0.2"

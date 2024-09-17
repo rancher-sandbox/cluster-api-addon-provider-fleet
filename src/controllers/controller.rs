@@ -100,6 +100,9 @@ where
         .unwrap_or(String::from("default"));
     let api: Api<R> = Api::namespaced(ctx.client.clone(), &ns);
 
+    let mut res = res.clone();
+    res.meta_mut().managed_fields = None;
+
     api.patch(
         &res.name_any(),
         &PatchParams::apply("addon-provider-fleet"),

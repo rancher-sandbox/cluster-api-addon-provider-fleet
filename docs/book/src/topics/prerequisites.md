@@ -28,7 +28,7 @@ envsubst < testdata/kind-config.yaml > _out/kind-config.yaml
 ```
 3. Create the local cluster. It is recommended to use `KUBE_VERSION>=1.26.3`.
 ```
-kind create cluster --config --image=kindest/node:v{{KUBE_VERSION}} --config _out/kind-config.yaml
+kind create cluster --image=kindest/node:v{{KUBE_VERSION}} --config _out/kind-config.yaml
 ```
 4. Install [fleet](https://github.com/rancher/fleet) and specify the `API_SERVER_URL` and CA.
 ```

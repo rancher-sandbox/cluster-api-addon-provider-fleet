@@ -97,3 +97,4 @@ pub mod cluster;
 pub mod cluster_class;
 pub mod cluster_group;
 pub mod controller;
+pub mod helm;

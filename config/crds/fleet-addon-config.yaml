@@ -185,11 +185,26 @@ spec:
                 required:
                 - server
                 type: object
+              install:
+                nullable: true
+                oneOf:
+                - required:
+                  - followLatest
+                - required:
+                  - version
+                properties:
+                  followLatest:
+                    description: Follow the latest version of the chart on install
+                    type: boolean
+                  version:
+                    description: Use specific version to install
+                    type: string
+                type: object
             type: object
           status:
             nullable: true
             properties:
-              installed_version:
+              installedVersion:
                 nullable: true
                 type: string
             type: object

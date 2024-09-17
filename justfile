@@ -4,7 +4,7 @@ ORG := "ghcr.io/rancher-sandbox"
 TAG := "dev"
 HOME_DIR := env_var('HOME')
 YQ_VERSION := "v4.43.1"
-CLUSTERCTL_VERSION := "v1.7.1"
+CLUSTERCTL_VERSION := "v1.8.3"
 OUT_DIR := "_out"
 KUSTOMIZE_VERSION := "v5.4.1"
 ARCH := if arch() == "aarch64" { "arm64"} else { "amd64" }
@@ -90,8 +90,7 @@ load-base features="":
 start-dev: _cleanup-out-dir _create-out-dir
     just update-helm-repos
     kind delete cluster --name dev || true
-    kind create cluster --config --image=kindest/node:v{{KUBE_VERSION}} --config testdata/kind-config.yaml
-    just install-fleet
+    kind create cluster --image=kindest/node:v{{KUBE_VERSION}} --config testdata/kind-config.yaml
     just install-capi
     kubectl wait pods --for=condition=Ready --timeout=150s --all --all-namespaces
 
@@ -109,13 +108,11 @@ deploy-app:
 
 # Deploy child cluster using docker & kubeadm
 deploy-child-cluster:
-    kubectl --context kind-dev apply -f testdata/config.yaml
     kubectl --context kind-dev apply -f testdata/cluster_docker_kcp.yaml
 
 # Deploy child cluster-call based cluster using docker & kubeadm
 deploy-child-cluster-class:
     kind delete cluster --name capi-quickstart || true
-    kubectl --context kind-dev apply -f testdata/config.yaml
     kubectl --context kind-dev apply -f testdata/capi-quickstart.yaml
 
 # Add and update helm repos used
@@ -131,8 +128,8 @@ update-helm-repos:
 install-fleet: _create-out-dir
     #!/usr/bin/env bash
     set -euxo pipefail
-    helm -n cattle-fleet-system install --version v0.10.1 --create-namespace --wait fleet-crd fleet/fleet-crd
-    helm install --version v0.10.1 --create-namespace -n cattle-fleet-system --set bootstrap.enabled=false fleet fleet/fleet --wait
+    helm -n cattle-fleet-system install --create-namespace --wait fleet-crd fleet/fleet-crd
+    helm install --create-namespace -n cattle-fleet-system --set bootstrap.enabled=false fleet fleet/fleet --wait
 
 # Install cluster api and any providers
 install-capi: _download-clusterctl
@@ -143,6 +140,8 @@ deploy features="": _download-kustomize
     just generate {{features}}
     just load-base {{features}}
     kustomize build config/default | kubectl apply -f -
+    kubectl --context kind-dev apply -f testdata/config.yaml
+    kubectl wait fleetaddonconfigs fleet-addon-config --for=jsonpath='{.status.installedVersion}' --timeout=150s
 
 undeploy: _download-kustomize
     kustomize build config/default | kubectl delete --ignore-not-found=true -f -
