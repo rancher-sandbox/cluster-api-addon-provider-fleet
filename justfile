@@ -124,6 +124,13 @@ update-helm-repos:
     #helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
     helm repo update
 
+# Install fleet into the k8s cluster
+install-fleet: _create-out-dir
+    #!/usr/bin/env bash
+    set -euxo pipefail
+    helm -n cattle-fleet-system install --create-namespace --wait fleet-crd fleet/fleet-crd
+    helm install --create-namespace -n cattle-fleet-system --set bootstrap.enabled=false fleet fleet/fleet --wait
+
 # Install cluster api and any providers
 install-capi: _download-clusterctl
     EXP_CLUSTER_RESOURCE_SET=true CLUSTER_TOPOLOGY=true clusterctl init -i docker
