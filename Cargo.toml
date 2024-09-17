@@ -34,7 +34,7 @@ actix-web = "4.4.0"
 futures = "0.3.28"
 tokio = { version = "1.39.2", features = ["macros", "rt-multi-thread"] }
 k8s-openapi = { version = "0.22", features = ["latest", "schemars"] }
-kube = { version = "0.94", features = [
+kube = { version = "0.95", features = [
     "runtime",
     "client",
     "derive",
