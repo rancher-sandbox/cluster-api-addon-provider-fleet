@@ -24,6 +24,9 @@ pub enum ClusterSyncError {
 
     #[error("Cluster update error: {0}")]
     PatchError(#[from] PatchError),
+
+    #[error("Cluster json encoding error: {0}")]
+    ClusterEncodeError(#[from] serde_json::Error),
 }
 
 pub type GroupSyncResult<T, E = GroupSyncError> = std::result::Result<T, E>;
