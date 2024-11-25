@@ -6,7 +6,7 @@ on:
       - "v*.*.*"
 
 env:
-  TAG: ${{ github.ref_name }}
+  IMAGE_NAME: ${{ github.repository }}
   REGISTRY: ghcr.io
 
 jobs:
