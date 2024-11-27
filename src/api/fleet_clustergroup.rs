@@ -24,8 +24,8 @@ pub struct ClusterGroupProxy {
     pub proxy: ClusterGroupSpec,
 }
 
-impl Into<ClusterGroupProxy> for ClusterGroupSpec {
-    fn into(self) -> ClusterGroupProxy {
-        ClusterGroupProxy { proxy: self }
+impl From<ClusterGroupSpec> for ClusterGroupProxy {
+    fn from(val: ClusterGroupSpec) -> Self {
+        ClusterGroupProxy { proxy: val }
     }
 }
