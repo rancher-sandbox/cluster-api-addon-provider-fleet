@@ -13,7 +13,7 @@ use cluster_api_rs::capi_cluster::{ClusterSpec, ClusterStatus};
 use self::prelude::*;
 
 /// ClusterProxy defines the desired state of the CAPI Cluster.
-#[derive(CustomResource, Serialize, Deserialize, Clone, Debug, JsonSchema, Default)]
+#[derive(CustomResource, Serialize, Deserialize, Clone, Debug, JsonSchema)]
 #[kube(
     group = "cluster.x-k8s.io",
     version = "v1beta1",
@@ -22,7 +22,6 @@ use self::prelude::*;
 )]
 #[kube(namespaced)]
 #[kube(status = "ClusterStatus")]
-#[kube(derive = "Default")]
 pub struct ClusterProxy {
     #[serde(flatten)]
     pub proxy: ClusterSpec,
