@@ -55,6 +55,7 @@ impl From<&ClusterClass> for ClusterGroup {
 }
 
 impl FleetBundle for FleetClusterClassBundle {
+    #[allow(refining_impl_trait)]
     async fn sync(&self, ctx: Arc<Context>) -> GroupSyncResult<Action> {
         match self.config.cluster_class_patch_enabled() {
             true => patch(ctx, self.fleet_group.clone()).await?,

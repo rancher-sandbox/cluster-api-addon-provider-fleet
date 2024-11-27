@@ -131,6 +131,7 @@ impl Cluster {
 }
 
 impl FleetBundle for FleetClusterBundle {
+    #[allow(refining_impl_trait)]
     async fn sync(&self, ctx: Arc<Context>) -> ClusterSyncResult<Action> {
         match self.config.cluster_patch_enabled() {
             true => patch(ctx.clone(), self.fleet.clone()).await?,

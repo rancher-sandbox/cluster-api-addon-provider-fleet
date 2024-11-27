@@ -25,10 +25,10 @@ pub struct ClusterSpecProxy {
     pub proxy: ClusterSpec,
 }
 
-impl Into<ClusterSpecProxy> for ClusterSpec {
-    fn into(self) -> ClusterSpecProxy {
+impl From<ClusterSpec> for ClusterSpecProxy {
+    fn from(val: ClusterSpec) -> Self {
         ClusterSpecProxy{
-            proxy: self,
+            proxy: val,
         }
     }
 }
