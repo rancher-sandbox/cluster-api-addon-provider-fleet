@@ -13,7 +13,7 @@ use cluster_api_rs::capi_clusterclass::{ClusterClassSpec, ClusterClassStatus};
 use self::prelude::*;
 
 /// ClusterClassProxy describes the desired state of the ClusterClass.
-#[derive(CustomResource, Serialize, Deserialize, Clone, Debug, Default, JsonSchema)]
+#[derive(CustomResource, Serialize, Deserialize, Clone, Debug, JsonSchema)]
 #[kube(
     group = "cluster.x-k8s.io",
     version = "v1beta1",
@@ -22,7 +22,6 @@ use self::prelude::*;
 )]
 #[kube(namespaced)]
 #[kube(status = "ClusterClassStatus")]
-#[kube(derive = "Default")]
 pub struct ClusterClassProxy {
     #[serde(flatten)]
     pub proxy: ClusterClassSpec,
