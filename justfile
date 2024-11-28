@@ -1,4 +1,4 @@
-NAME := "cluster-api-fleet-controller"
+NAME := "cluster-api-addon-provider-fleet"
 KUBE_VERSION := env_var_or_default('KUBE_VERSION', '1.30.0')
 ORG := "ghcr.io/rancher-sandbox"
 TAG := "dev"
