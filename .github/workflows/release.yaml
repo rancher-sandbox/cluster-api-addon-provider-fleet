@@ -7,7 +7,7 @@ on:
 
 env:
   TAG: ${{ github.ref_name }}
-  IMAGE_NAME: ${{ github.repository_owner }}/cluster-api-addon-provider-fleet
+  IMAGE_NAME: ${{ github.repository }}
   REGISTRY: ghcr.io
 
 jobs:
@@ -33,6 +33,11 @@ jobs:
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
