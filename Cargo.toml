@@ -56,7 +56,7 @@ opentelemetry-otlp = { version = "0.26.0", features = [
     "tokio",
 ], optional = true }
 tonic = { version = "0.12.3", optional = true }
-thiserror = "2.0.3"
+thiserror = "2.0.6"
 anyhow = "1.0.86"
 base64 = "0.22.1"
 clap = { version = "4.5.17", features = ["derive"] }
