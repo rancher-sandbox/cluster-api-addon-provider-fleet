@@ -59,7 +59,7 @@ tonic = { version = "0.12.3", optional = true }
 thiserror = "2.0.6"
 anyhow = "1.0.86"
 base64 = "0.22.1"
-clap = { version = "4.5.17", features = ["derive"] }
+clap = { version = "4.5.23", features = ["derive"] }
 cluster-api-rs = "1.8.5"
 fleet-api-rs = "0.11.1"
 
