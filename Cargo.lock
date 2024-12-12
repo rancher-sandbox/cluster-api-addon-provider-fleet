@@ -637,12 +637,12 @@ dependencies = [
 
 [[package]]
 name = "cluster-api-rs"
-version = "1.8.5"
+version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e0dcd0bee43c70f4cd31a8dccd62cccd3514b3dc59167db4291fffaeb95d14f"
+checksum = "206dc23ce85f67a8a0fdf5c9f1955a336f31dcebd252a6f1859ea815b54208de"
 dependencies = [
  "k8s-openapi",
- "kube 0.95.0",
+ "kube 0.97.0",
  "schemars",
  "serde",
  "serde_json",
@@ -1639,18 +1639,6 @@ dependencies = [
 
 [[package]]
 name = "kube"
-version = "0.95.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa21063c854820a77c5d7f8deeb7ffa55246d8304e4bcd8cce2956752c6604f8"
-dependencies = [
- "k8s-openapi",
- "kube-client 0.95.0",
- "kube-core 0.95.0",
- "kube-derive 0.95.0",
-]
-
-[[package]]
-name = "kube"
 version = "0.96.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "efffeb3df0bd4ef3e5d65044573499c0e4889b988070b08c50b25b1329289a1f"
@@ -1672,44 +1660,6 @@ dependencies = [
  "kube-core 0.97.0",
  "kube-derive 0.97.0",
  "kube-runtime",
-]
-
-[[package]]
-name = "kube-client"
-version = "0.95.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31c2355f5c9d8a11900e71a6fe1e47abd5ec45bf971eb4b162ffe97b46db9bb7"
-dependencies = [
- "base64 0.22.1",
- "bytes",
- "chrono",
- "either",
- "futures",
- "home",
- "http 1.2.0",
- "http-body",
- "http-body-util",
- "hyper",
- "hyper-http-proxy",
- "hyper-rustls",
- "hyper-timeout",
- "hyper-util",
- "jsonpath-rust 0.5.1",
- "k8s-openapi",
- "kube-core 0.95.0",
- "pem",
- "rustls",
- "rustls-pemfile",
- "secrecy 0.8.0",
- "serde",
- "serde_json",
- "serde_yaml",
- "thiserror 1.0.69",
- "tokio",
- "tokio-util",
- "tower 0.4.13",
- "tower-http 0.5.2",
- "tracing",
 ]
 
 [[package]]
@@ -1738,7 +1688,7 @@ dependencies = [
  "pem",
  "rustls",
  "rustls-pemfile",
- "secrecy 0.10.3",
+ "secrecy",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -1746,7 +1696,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tower 0.5.1",
- "tower-http 0.6.2",
+ "tower-http",
  "tracing",
 ]
 
@@ -1776,7 +1726,7 @@ dependencies = [
  "pem",
  "rustls",
  "rustls-pemfile",
- "secrecy 0.10.3",
+ "secrecy",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -1784,25 +1734,8 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tower 0.5.1",
- "tower-http 0.6.2",
+ "tower-http",
  "tracing",
-]
-
-[[package]]
-name = "kube-core"
-version = "0.95.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3030bd91c9db544a50247e7d48d7db9cf633c172732dce13351854526b1e666"
-dependencies = [
- "chrono",
- "form_urlencoded",
- "http 1.2.0",
- "k8s-openapi",
- "schemars",
- "serde",
- "serde-value",
- "serde_json",
- "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1838,19 +1771,6 @@ dependencies = [
  "serde-value",
  "serde_json",
  "thiserror 2.0.6",
-]
-
-[[package]]
-name = "kube-derive"
-version = "0.95.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa98be978eddd70a773aa8e86346075365bfb7eb48783410852dbf7cb57f0c27"
-dependencies = [
- "darling",
- "proc-macro2",
- "quote",
- "serde_json",
- "syn",
 ]
 
 [[package]]
@@ -2644,16 +2564,6 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "secrecy"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9bd1c54ea06cfd2f6b63219704de0b9b4f72dcc2b8fdef820be6cd799780e91e"
-dependencies = [
- "serde",
- "zeroize",
-]
-
-[[package]]
-name = "secrecy"
 version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e891af845473308773346dc847b2c23ee78fe442e0472ac50e22a18a93d3ae5a"
@@ -3171,25 +3081,6 @@ dependencies = [
  "sync_wrapper 0.1.2",
  "tokio",
  "tokio-util",
- "tower-layer",
- "tower-service",
- "tracing",
-]
-
-[[package]]
-name = "tower-http"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e9cd434a998747dd2c4276bc96ee2e0c7a2eadf3cae88e52be55a05fa9053f5"
-dependencies = [
- "base64 0.21.7",
- "bitflags",
- "bytes",
- "http 1.2.0",
- "http-body",
- "http-body-util",
- "mime",
- "pin-project-lite",
  "tower-layer",
  "tower-service",
  "tracing",
