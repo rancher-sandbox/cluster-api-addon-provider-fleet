@@ -616,7 +616,7 @@ dependencies = [
  "http 1.2.0",
  "hyper",
  "k8s-openapi",
- "kube 0.97.0",
+ "kube",
  "opentelemetry 0.20.0",
  "opentelemetry-otlp",
  "prometheus",
@@ -642,7 +642,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "206dc23ce85f67a8a0fdf5c9f1955a336f31dcebd252a6f1859ea815b54208de"
 dependencies = [
  "k8s-openapi",
- "kube 0.97.0",
+ "kube",
  "schemars",
  "serde",
  "serde_json",
@@ -920,12 +920,12 @@ dependencies = [
 
 [[package]]
 name = "fleet-api-rs"
-version = "0.11.1"
+version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "370b8a5973df0def5153ccddb761e7051a8d512048bb862a462bb0840d0a1c12"
+checksum = "b6cfd7c6df6a0793295424b3da4d595ea088afdeaed37e20d95d932601513a60"
 dependencies = [
  "k8s-openapi",
- "kube 0.96.0",
+ "kube",
  "schemars",
  "serde",
  "serde_json",
@@ -1587,21 +1587,6 @@ dependencies = [
 
 [[package]]
 name = "jsonpath-rust"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19d8fe85bd70ff715f31ce8c739194b423d79811a19602115d611a3ec85d6200"
-dependencies = [
- "lazy_static",
- "once_cell",
- "pest",
- "pest_derive",
- "regex",
- "serde_json",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "jsonpath-rust"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "69a61b87f6a55cc6c28fed5739dd36b9642321ce63e4a5e4a4715d69106f4a10"
@@ -1639,65 +1624,15 @@ dependencies = [
 
 [[package]]
 name = "kube"
-version = "0.96.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "efffeb3df0bd4ef3e5d65044573499c0e4889b988070b08c50b25b1329289a1f"
-dependencies = [
- "k8s-openapi",
- "kube-client 0.96.0",
- "kube-core 0.96.0",
- "kube-derive 0.96.0",
-]
-
-[[package]]
-name = "kube"
 version = "0.97.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5fd2596428f922f784ca43907c449f104d69055c811135684474143736c67ae"
 dependencies = [
  "k8s-openapi",
- "kube-client 0.97.0",
- "kube-core 0.97.0",
- "kube-derive 0.97.0",
+ "kube-client",
+ "kube-core",
+ "kube-derive",
  "kube-runtime",
-]
-
-[[package]]
-name = "kube-client"
-version = "0.96.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bf471ece8ff8d24735ce78dac4d091e9fcb8d74811aeb6b75de4d1c3f5de0f1"
-dependencies = [
- "base64 0.22.1",
- "bytes",
- "chrono",
- "either",
- "futures",
- "home",
- "http 1.2.0",
- "http-body",
- "http-body-util",
- "hyper",
- "hyper-http-proxy",
- "hyper-rustls",
- "hyper-timeout",
- "hyper-util",
- "jsonpath-rust 0.5.1",
- "k8s-openapi",
- "kube-core 0.96.0",
- "pem",
- "rustls",
- "rustls-pemfile",
- "secrecy",
- "serde",
- "serde_json",
- "serde_yaml",
- "thiserror 1.0.69",
- "tokio",
- "tokio-util",
- "tower 0.5.1",
- "tower-http",
- "tracing",
 ]
 
 [[package]]
@@ -1720,9 +1655,9 @@ dependencies = [
  "hyper-rustls",
  "hyper-timeout",
  "hyper-util",
- "jsonpath-rust 0.7.3",
+ "jsonpath-rust",
  "k8s-openapi",
- "kube-core 0.97.0",
+ "kube-core",
  "pem",
  "rustls",
  "rustls-pemfile",
@@ -1736,23 +1671,6 @@ dependencies = [
  "tower 0.5.1",
  "tower-http",
  "tracing",
-]
-
-[[package]]
-name = "kube-core"
-version = "0.96.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f42346d30bb34d1d7adc5c549b691bce7aa3a1e60254e68fab7e2d7b26fe3d77"
-dependencies = [
- "chrono",
- "form_urlencoded",
- "http 1.2.0",
- "k8s-openapi",
- "schemars",
- "serde",
- "serde-value",
- "serde_json",
- "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1771,19 +1689,6 @@ dependencies = [
  "serde-value",
  "serde_json",
  "thiserror 2.0.6",
-]
-
-[[package]]
-name = "kube-derive"
-version = "0.96.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9364e04cc5e0482136c6ee8b7fb7551812da25802249f35b3def7aaa31e82ad"
-dependencies = [
- "darling",
- "proc-macro2",
- "quote",
- "serde_json",
- "syn",
 ]
 
 [[package]]
@@ -1816,7 +1721,7 @@ dependencies = [
  "json-patch",
  "jsonptr",
  "k8s-openapi",
- "kube-client 0.97.0",
+ "kube-client",
  "parking_lot",
  "pin-project",
  "serde",
