@@ -61,7 +61,7 @@ anyhow = "1.0.94"
 base64 = "0.22.1"
 clap = { version = "4.5.23", features = ["derive"] }
 cluster-api-rs = "1.9.0"
-fleet-api-rs = "0.11.1"
+fleet-api-rs = "0.11.2"
 
 [dev-dependencies]
 assert-json-diff = "2.0.2"
