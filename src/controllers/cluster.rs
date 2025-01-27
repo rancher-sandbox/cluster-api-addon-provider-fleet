@@ -10,7 +10,7 @@ use cluster_api_rs::capi_cluster::ClusterTopology;
 use fleet_api_rs::fleet_cluster::{ClusterAgentTolerations, ClusterSpec};
 use futures::channel::mpsc::Sender;
 use k8s_openapi::api::core::v1::Namespace;
-use kube::api::{DynamicObject, Object, ObjectMeta};
+use kube::api::{Object, ObjectMeta};
 
 use kube::core::SelectorExt as _;
 use kube::{api::ResourceExt, runtime::controller::Action, Resource};

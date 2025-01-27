@@ -124,7 +124,7 @@ install-fleet: _create-out-dir
 
 # Install cluster api and any providers
 install-capi: _download-clusterctl
-    EXP_CLUSTER_RESOURCE_SET=true CLUSTER_TOPOLOGY=true clusterctl init -i docker
+    EXP_CLUSTER_RESOURCE_SET=true CLUSTER_TOPOLOGY=true clusterctl init -i docker -b rke2 -c rke2 -b kubeadm -c kubeadm
 
 # Deploy will deploy the operator
 deploy features="": _download-kustomize
