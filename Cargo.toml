@@ -60,7 +60,7 @@ thiserror = "2.0.11"
 anyhow = "1.0.95"
 base64 = "0.22.1"
 clap = { version = "4.5.27", features = ["derive"] }
-cluster-api-rs = "1.9.3"
+cluster-api-rs = "1.9.4"
 fleet-api-rs = "0.11.2"
 
 [dev-dependencies]
