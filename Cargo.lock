@@ -615,7 +615,7 @@ dependencies = [
  "futures",
  "http 1.2.0",
  "hyper",
- "k8s-openapi 0.23.0",
+ "k8s-openapi 0.24.0",
  "kube 0.97.0",
  "opentelemetry 0.20.0",
  "opentelemetry-otlp",
