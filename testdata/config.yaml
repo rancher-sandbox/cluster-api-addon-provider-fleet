@@ -20,5 +20,5 @@ spec:
       matchLabels:
         import: ""
   install:
-    followLatest: true
+    version: v0.12.0-alpha.3
 

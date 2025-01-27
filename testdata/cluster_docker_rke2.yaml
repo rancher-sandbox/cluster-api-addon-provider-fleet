@@ -103,7 +103,7 @@ metadata:
   namespace: default
 spec:
   agentConfig:
-    version: v1.27.3+rke2r1
+    version: v1.31.0+rke2r1
   # nodeAnnotations:
   #   richtest: "true"
   infrastructureRef:
@@ -147,7 +147,7 @@ spec:
         apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
         kind: DockerMachineTemplate
         name: worker
-      version: v1.27.3
+      version: v1.31.0
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: DockerMachineTemplate
@@ -167,7 +167,7 @@ spec:
   template:
     spec:
       agentConfig:
-        version: v1.27.3+rke2r1
+        version: v1.31.0+rke2r1
       #nodeAnnotations:
       #  richtest: "true"
       # postRKE2Commands:

@@ -10,13 +10,15 @@ use cluster_api_rs::capi_cluster::ClusterTopology;
 use fleet_api_rs::fleet_cluster::{ClusterAgentTolerations, ClusterSpec};
 use futures::channel::mpsc::Sender;
 use k8s_openapi::api::core::v1::Namespace;
-use kube::api::ObjectMeta;
+use kube::api::{Object, ObjectMeta};
 
 use kube::core::SelectorExt as _;
 use kube::{api::ResourceExt, runtime::controller::Action, Resource};
 use kube::{Api, Client};
 #[cfg(feature = "agent-initiated")]
-use rand::distributions::{Alphanumeric, DistString as _};
+use rand::distr::{Alphanumeric, SampleString as _};
+use serde::Serialize;
+use serde_json::Value;
 use tokio::sync::Mutex;
 use tracing::warn;
 
@@ -32,10 +34,61 @@ use super::{BundleResult, ClusterSyncResult, LabelCheckResult};
 pub static CONTROLPLANE_READY_CONDITION: &str = "ControlPlaneReady";
 
 pub struct FleetClusterBundle {
+    template_sources: TemplateSources,
     fleet: fleet_cluster::Cluster,
     #[cfg(feature = "agent-initiated")]
     cluster_registration_token: Option<ClusterRegistrationToken>,
     config: FleetAddonConfig,
+}
+
+pub struct TemplateSources(Cluster);
+
+#[derive(Serialize)]
+struct TemplateValues {
+    #[serde(rename = "Cluster")]
+    cluster: Cluster,
+    #[serde(rename = "ControlPlane")]
+    control_plane: Object<Value, Value>,
+    #[serde(rename = "InfrastructureCluster")]
+    infrastructure_cluster: Object<Value, Value>,
+}
+
+impl TemplateSources {
+    fn new(cluster: &Cluster) -> Self {
+        TemplateSources(cluster.clone())
+    }
+
+    async fn resolve(&self, client: Client) -> Option<Value> {
+        // We need to remove all dynamic or unnessesary values from these resources
+        let mut cluster = self.0.clone();
+
+        cluster.status = None;
+        cluster.meta_mut().managed_fields = None;
+
+        let mut control_plane: Object<Value, Value> = client
+            .fetch(&self.0.spec.proxy.control_plane_ref.clone()?)
+            .await
+            .ok()?;
+
+        control_plane.status = None;
+        control_plane.meta_mut().managed_fields = None;
+
+        let mut infrastructure_cluster: Object<Value, Value> = client
+            .fetch(&self.0.spec.proxy.infrastructure_ref.clone()?)
+            .await
+            .ok()?;
+
+        infrastructure_cluster.status = None;
+        infrastructure_cluster.meta_mut().managed_fields = None;
+
+        let values = TemplateValues {
+            cluster,
+            control_plane,
+            infrastructure_cluster,
+        };
+
+        serde_json::to_value(values).ok()
+    }
 }
 
 impl From<&Cluster> for ObjectMeta {
@@ -60,12 +113,21 @@ impl Cluster {
             None | Some(ClusterTopology { .. }) => self.labels().clone(),
         };
 
-        let agent_tolerations = Some(vec![ClusterAgentTolerations {
-            effect: Some("NoSchedule".into()),
-            operator: Some("Equal".into()),
-            key: Some("node.kubernetes.io/not-ready".into()),
-            ..Default::default()
-        }]);
+        let agent_tolerations = Some(vec![
+            ClusterAgentTolerations {
+                effect: Some("NoSchedule".into()),
+                operator: Some("Equal".into()),
+                key: Some("node.kubernetes.io/not-ready".into()),
+                ..Default::default()
+            },
+            ClusterAgentTolerations {
+                effect: Some("NoSchedule".into()),
+                operator: Some("Equal".into()),
+                key: Some("node.cloudprovider.kubernetes.io/uninitialized".into()),
+                value: Some("true".into()),
+                ..Default::default()
+            },
+        ]);
 
         fleet_cluster::Cluster {
             metadata: ObjectMeta {
@@ -80,7 +142,7 @@ impl Cluster {
             #[cfg(feature = "agent-initiated")]
             spec: match config.agent_initiated_connection() {
                 true => ClusterSpec {
-                    client_id: Some(Alphanumeric.sample_string(&mut rand::thread_rng(), 64)),
+                    client_id: Some(Alphanumeric.sample_string(&mut rand::rng(), 64)),
                     agent_namespace: config.agent_install_namespace().into(),
                     host_network: config.host_network,
                     agent_tolerations,
@@ -133,9 +195,16 @@ impl Cluster {
 impl FleetBundle for FleetClusterBundle {
     #[allow(refining_impl_trait)]
     async fn sync(&self, ctx: Arc<Context>) -> ClusterSyncResult<Action> {
+        let mut cluster = self.fleet.clone();
+
+        if let Some(template) = self.template_sources.resolve(ctx.client.clone()).await {
+            let template = serde_json::from_value(template)?;
+            cluster.spec.proxy.template_values = Some(template);
+        }
+
         match self.config.cluster_patch_enabled() {
-            true => patch(ctx.clone(), self.fleet.clone()).await?,
-            false => get_or_create(ctx.clone(), self.fleet.clone()).await?,
+            true => patch(ctx.clone(), cluster).await?,
+            false => get_or_create(ctx.clone(), cluster).await?,
         };
 
         #[cfg(feature = "agent-initiated")]
@@ -162,6 +231,7 @@ impl FleetController for Cluster {
         }
 
         Ok(Some(FleetClusterBundle {
+            template_sources: TemplateSources::new(self),
             fleet: self.to_cluster(config.spec.cluster.clone()),
             #[cfg(feature = "agent-initiated")]
             cluster_registration_token: self

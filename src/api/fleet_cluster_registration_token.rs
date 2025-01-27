@@ -27,8 +27,6 @@ pub struct ClusterRegistrationTokenProxy {
 
 impl Into<ClusterRegistrationTokenProxy> for ClusterRegistrationTokenSpec {
     fn into(self) -> ClusterRegistrationTokenProxy {
-        ClusterRegistrationTokenProxy{
-            proxy: self,
-        }
+        ClusterRegistrationTokenProxy { proxy: self }
     }
 }

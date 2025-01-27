@@ -27,8 +27,6 @@ pub struct ClusterSpecProxy {
 
 impl From<ClusterSpec> for ClusterSpecProxy {
     fn from(val: ClusterSpec) -> Self {
-        ClusterSpecProxy{
-            proxy: val,
-        }
+        ClusterSpecProxy { proxy: val }
     }
 }

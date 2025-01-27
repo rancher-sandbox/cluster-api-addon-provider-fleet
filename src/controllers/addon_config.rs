@@ -101,6 +101,7 @@ impl FleetAddonConfig {
                     update_dependency: true,
                     create_namespace: true,
                     bootstrap_local_cluster: false,
+                    experimental_oci_ops: true,
                 },
             )
             .await?;
