@@ -68,19 +68,22 @@ where
     ctx.diagnostics
         .read()
         .await
-        .recorder(ctx.client.clone(), &res)
+        .recorder(ctx.client.clone())
         // Record object creation
-        .publish(Event {
-            type_: EventType::Normal,
-            reason: "Created".into(),
-            note: Some(format!(
-                "Created fleet object `{}` in `{}`",
-                res.name_any(),
-                res.namespace().unwrap_or_default()
-            )),
-            action: "Creating".into(),
-            secondary: None,
-        })
+        .publish(
+            &Event {
+                type_: EventType::Normal,
+                reason: "Created".into(),
+                note: Some(format!(
+                    "Created fleet object `{}` in `{}`",
+                    res.name_any(),
+                    res.namespace().unwrap_or_default()
+                )),
+                action: "Creating".into(),
+                secondary: None,
+            },
+            &res.object_ref(&()),
+        )
         .await?;
 
     Ok(Action::await_change())
@@ -115,19 +118,22 @@ where
     ctx.diagnostics
         .read()
         .await
-        .recorder(ctx.client.clone(), &res)
+        .recorder(ctx.client.clone())
         // Record object creation
-        .publish(Event {
-            type_: EventType::Normal,
-            reason: "Updated".into(),
-            note: Some(format!(
-                "Updated fleet object `{}` in `{}`",
-                res.name_any(),
-                res.namespace().unwrap_or_default()
-            )),
-            action: "Creating".into(),
-            secondary: None,
-        })
+        .publish(
+            &Event {
+                type_: EventType::Normal,
+                reason: "Updated".into(),
+                note: Some(format!(
+                    "Updated fleet object `{}` in `{}`",
+                    res.name_any(),
+                    res.namespace().unwrap_or_default()
+                )),
+                action: "Creating".into(),
+                secondary: None,
+            },
+            &res.object_ref(&()),
+        )
         .await?;
 
     Ok(Action::await_change())
@@ -182,15 +188,18 @@ where
         ctx.diagnostics
             .read()
             .await
-            .recorder(ctx.client.clone(), self)
+            .recorder(ctx.client.clone())
             // Cleanup is perfomed by owner reference
-            .publish(Event {
-                type_: EventType::Normal,
-                reason: "DeleteRequested".into(),
-                note: Some(format!("Delete `{}`", self.name_any())),
-                action: "Deleting".into(),
-                secondary: None,
-            })
+            .publish(
+                &Event {
+                    type_: EventType::Normal,
+                    reason: "DeleteRequested".into(),
+                    note: Some(format!("Delete `{}`", self.name_any())),
+                    action: "Deleting".into(),
+                    secondary: None,
+                },
+                &self.object_ref(&()),
+            )
             .await?;
 
         Ok(Action::await_change())

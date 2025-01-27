@@ -48,7 +48,8 @@ impl From<&ClusterClass> for ClusterGroup {
                     ),
                     ..Default::default()
                 }),
-            }.into(),
+            }
+            .into(),
             status: Default::default(),
         }
     }

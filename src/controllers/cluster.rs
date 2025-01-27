@@ -16,7 +16,7 @@ use kube::core::SelectorExt as _;
 use kube::{api::ResourceExt, runtime::controller::Action, Resource};
 use kube::{Api, Client};
 #[cfg(feature = "agent-initiated")]
-use rand::distributions::{Alphanumeric, DistString as _};
+use rand::distr::{Alphanumeric, SampleString as _};
 use tokio::sync::Mutex;
 use tracing::warn;
 
@@ -80,7 +80,7 @@ impl Cluster {
             #[cfg(feature = "agent-initiated")]
             spec: match config.agent_initiated_connection() {
                 true => ClusterSpec {
-                    client_id: Some(Alphanumeric.sample_string(&mut rand::thread_rng(), 64)),
+                    client_id: Some(Alphanumeric.sample_string(&mut rand::rng(), 64)),
                     agent_namespace: config.agent_install_namespace().into(),
                     host_network: config.host_network,
                     agent_tolerations,

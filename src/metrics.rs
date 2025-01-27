@@ -4,7 +4,7 @@ use crate::Error;
 use chrono::{DateTime, Utc};
 use kube::{
     runtime::events::{Recorder, Reporter},
-    Client, Resource, ResourceExt,
+    Client, ResourceExt,
 };
 use prometheus::{histogram_opts, opts, HistogramVec, IntCounter, IntCounterVec, Registry};
 use serde::Serialize;
@@ -89,8 +89,8 @@ impl Default for Diagnostics {
 }
 
 impl Diagnostics {
-    pub fn recorder<R: Resource<DynamicType = ()>>(&self, client: Client, cluster: &R) -> Recorder {
-        Recorder::new(client, self.reporter.clone(), cluster.object_ref(&()))
+    pub fn recorder(&self, client: Client) -> Recorder {
+        Recorder::new(client, self.reporter.clone())
     }
 }
 
