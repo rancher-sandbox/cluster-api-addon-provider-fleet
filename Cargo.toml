@@ -29,7 +29,7 @@ telemetry = ["tonic", "opentelemetry-otlp"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rand = { version = "0.8", features = ["small_rng"] }
+rand = { version = "0.9", features = ["small_rng"] }
 actix-web = "4.9.0"
 futures = "0.3.28"
 tokio = { version = "1.43.0", features = ["macros", "rt-multi-thread"] }
