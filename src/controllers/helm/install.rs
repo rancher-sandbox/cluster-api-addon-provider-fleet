@@ -19,6 +19,7 @@ pub struct FleetChart {
     pub update_dependency: bool,
     pub create_namespace: bool,
     pub bootstrap_local_cluster: bool,
+    pub experimental_oci_ops: bool,
 }
 
 #[derive(Deserialize)]
@@ -106,6 +107,10 @@ impl FleetChart {
         install.args([
             "--set",
             &format!("bootstrap.enabled={}", self.bootstrap_local_cluster),
+            "--set-string",
+            "extraEnv[0].name=EXPERIMENTAL_HELM_OPS",
+            "--set-string",
+            &format!("extraEnv[0].value={}", self.experimental_oci_ops),
         ]);
 
         Ok(install.spawn()?)

@@ -1,10 +1,10 @@
 NAME := "cluster-api-addon-provider-fleet"
-KUBE_VERSION := env_var_or_default('KUBE_VERSION', '1.30.0')
+KUBE_VERSION := env_var_or_default('KUBE_VERSION', '1.31.0')
 ORG := "ghcr.io/rancher-sandbox"
 TAG := "dev"
 HOME_DIR := env_var('HOME')
 YQ_VERSION := "v4.43.1"
-CLUSTERCTL_VERSION := "v1.8.3"
+CLUSTERCTL_VERSION := "v1.9.4"
 OUT_DIR := "_out"
 KUSTOMIZE_VERSION := "v5.4.1"
 ARCH := if arch() == "aarch64" { "arm64"} else { "amd64" }
