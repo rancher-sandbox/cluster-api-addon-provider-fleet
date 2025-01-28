@@ -69,6 +69,10 @@ build-agent-initiated: (_build "agent-initiated")
 # docker build with telemetry
 build-otel: (_build "telemetry")
 
+# Build  docker image
+docker-build:
+    docker build . -t {{ORG}}/{{NAME}}:{{TAG}}
+
 # Push the docker images
 docker-push:
     docker push {{ORG}}/{{NAME}}:{{TAG}}
