@@ -30,30 +30,30 @@ use super::{
 
 #[derive(Resource, Serialize, Deserialize, Default, Clone, Debug)]
 #[resource(inherit = ConfigMap)]
-struct FleetConfig {
+pub struct FleetConfig {
     #[serde(flatten, default)]
-    types: Option<TypeMeta>,
-    metadata: ObjectMeta,
-    data: FleetConfigSpec,
+    pub types: Option<TypeMeta>,
+    pub metadata: ObjectMeta,
+    pub data: FleetConfigSpec,
 }
 
 #[serde_as]
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
-struct FleetConfigSpec {
+pub struct FleetConfigSpec {
     #[serde_as(as = "DisplayFromStr")]
-    config: FleetConfigData,
+    pub config: FleetConfigData,
 }
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
-struct FleetConfigData {
+pub struct FleetConfigData {
     #[serde(rename = "apiServerURL")]
-    api_server_url: String,
+    pub api_server_url: String,
 
     #[serde(rename = "apiServerCA")]
-    api_server_ca: String,
+    pub api_server_ca: String,
 
     #[serde(flatten)]
-    other: Value,
+    pub other: Value,
 }
 
 impl FromStr for FleetConfigData {
