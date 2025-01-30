@@ -3,6 +3,7 @@ use crate::api::capi_clusterclass::ClusterClass;
 use crate::api::fleet_addon_config::FleetAddonConfig;
 use crate::api::fleet_cluster;
 use crate::api::fleet_clustergroup::ClusterGroup;
+use crate::controllers::addon_config::FleetConfig;
 use crate::controllers::controller::{fetch_config, Context, FleetController};
 use crate::metrics::Diagnostics;
 use crate::{Error, Metrics};
@@ -12,6 +13,8 @@ use futures::channel::mpsc;
 use futures::StreamExt;
 
 use k8s_openapi::api::core::v1::Namespace;
+use kube::core::DeserializeGuard;
+use kube::runtime::reflector::ObjectRef;
 use kube::runtime::{metadata_watcher, predicates, reflector, watcher, WatchStreamExt};
 use kube::ResourceExt as _;
 use kube::{
@@ -89,6 +92,11 @@ pub async fn run_fleet_addon_config_controller(state: State) {
         .expect("failed to create kube Client");
     let api: Api<FleetAddonConfig> = Api::all(client.clone());
     let fleet_addon_config_controller = Controller::new(api, watcher::Config::default())
+        .watches(
+            Api::<DeserializeGuard<FleetConfig>>::all(client.clone()),
+            Config::default().fields("metadata.name=fleet-controller"),
+            |config| config.0.ok().map(|_| ObjectRef::new("fleet-addon-config")),
+        )
         .run(
             FleetAddonConfig::reconcile_config_sync,
             error_policy,

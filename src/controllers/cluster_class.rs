@@ -5,7 +5,7 @@ use crate::api::fleet_clustergroup::ClusterGroup;
 
 use fleet_api_rs::fleet_clustergroup::{ClusterGroupSelector, ClusterGroupSpec};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
-use kube::api::ObjectMeta;
+use kube::api::{ObjectMeta, TypeMeta};
 
 use kube::{api::ResourceExt, runtime::controller::Action, Resource};
 
@@ -26,6 +26,7 @@ pub struct FleetClusterClassBundle {
 impl From<&ClusterClass> for ClusterGroup {
     fn from(cluster_class: &ClusterClass) -> Self {
         Self {
+            types: Some(TypeMeta::resource::<ClusterGroup>()),
             metadata: ObjectMeta {
                 name: Some(cluster_class.name_any()),
                 namespace: cluster_class.meta().namespace.clone(),
@@ -48,9 +49,8 @@ impl From<&ClusterClass> for ClusterGroup {
                     ),
                     ..Default::default()
                 }),
-            }
-            .into(),
-            status: Default::default(),
+            },
+            ..Default::default()
         }
     }
 }

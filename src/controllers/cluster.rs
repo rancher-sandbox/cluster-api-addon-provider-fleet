@@ -10,7 +10,7 @@ use cluster_api_rs::capi_cluster::ClusterTopology;
 use fleet_api_rs::fleet_cluster::{ClusterAgentTolerations, ClusterSpec};
 use futures::channel::mpsc::Sender;
 use k8s_openapi::api::core::v1::Namespace;
-use kube::api::{Object, ObjectMeta};
+use kube::api::{Object, ObjectMeta, TypeMeta};
 
 use kube::core::SelectorExt as _;
 use kube::{api::ResourceExt, runtime::controller::Action, Resource};
@@ -66,7 +66,7 @@ impl TemplateSources {
         cluster.meta_mut().managed_fields = None;
 
         let mut control_plane: Object<Value, Value> = client
-            .fetch(&self.0.spec.proxy.control_plane_ref.clone()?)
+            .fetch(&self.0.spec.control_plane_ref.clone()?)
             .await
             .ok()?;
 
@@ -74,7 +74,7 @@ impl TemplateSources {
         control_plane.meta_mut().managed_fields = None;
 
         let mut infrastructure_cluster: Object<Value, Value> = client
-            .fetch(&self.0.spec.proxy.infrastructure_ref.clone()?)
+            .fetch(&self.0.spec.infrastructure_ref.clone()?)
             .await
             .ok()?;
 
@@ -104,7 +104,7 @@ impl From<&Cluster> for ObjectMeta {
 impl Cluster {
     fn to_cluster(self: &Cluster, config: Option<ClusterConfig>) -> fleet_cluster::Cluster {
         let config = config.unwrap_or_default();
-        let labels = match &self.spec.proxy.topology {
+        let labels = match &self.spec.topology {
             Some(ClusterTopology { class, .. }) if !class.is_empty() => {
                 let mut labels = self.labels().clone();
                 labels.insert(CLUSTER_CLASS_LABEL.to_string(), class.clone());
@@ -130,6 +130,7 @@ impl Cluster {
         ]);
 
         fleet_cluster::Cluster {
+            types: Some(TypeMeta::resource::<fleet_cluster::Cluster>()),
             metadata: ObjectMeta {
                 labels: Some(labels),
                 owner_references: config
@@ -165,9 +166,8 @@ impl Cluster {
                 host_network: config.host_network,
                 agent_tolerations,
                 ..Default::default()
-            }
-            .into(),
-            status: Default::default(),
+            },
+            ..Default::default()
         }
     }
 
@@ -199,7 +199,7 @@ impl FleetBundle for FleetClusterBundle {
 
         if let Some(template) = self.template_sources.resolve(ctx.client.clone()).await {
             let template = serde_json::from_value(template)?;
-            cluster.spec.proxy.template_values = Some(template);
+            cluster.spec.template_values = Some(template);
         }
 
         match self.config.cluster_patch_enabled() {
