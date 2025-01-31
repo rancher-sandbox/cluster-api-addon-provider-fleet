@@ -86,10 +86,6 @@ struct CertData {
 impl FleetAddonConfig {
     #[instrument(skip_all, fields(trace_id = display(telemetry::get_trace_id()), name = self.name_any(), namespace = self.namespace()))]
     pub async fn reconcile_helm(self: Arc<Self>, ctx: Arc<Context>) -> crate::Result<Action> {
-        if self.name_any() != "fleet-addon-config" {
-            return Ok(Action::await_change());
-        }
-
         if let Some(install) = &self.spec.install {
             self.install_fleet(
                 ctx.clone(),
@@ -115,10 +111,6 @@ impl FleetAddonConfig {
         self: Arc<Self>,
         ctx: Arc<Context>,
     ) -> crate::Result<Action> {
-        if self.name_any() != "fleet-addon-config" {
-            return Ok(Action::await_change());
-        }
-
         let ns = Namespace::from("cattle-fleet-system");
         let mut fleet_config: FleetConfig = ctx.client.get("fleet-controller", &ns).await?;
 

@@ -2,8 +2,7 @@ use k8s_openapi::{
     api::core::v1::ObjectReference, apimachinery::pkg::apis::meta::v1::LabelSelector,
 };
 use kube::{
-    core::{ParseExpressionError, Selector},
-    CustomResource,
+    core::{ParseExpressionError, Selector}, CELSchema, CustomResource
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -11,12 +10,13 @@ use serde::{Deserialize, Serialize};
 pub const AGENT_NAMESPACE: &str = "fleet-addon-agent";
 
 /// This provides a config for fleet addon functionality
-#[derive(CustomResource, Deserialize, Serialize, Clone, Default, Debug, JsonSchema)]
+#[derive(CustomResource, Deserialize, Serialize, Clone, Default, Debug, CELSchema)]
 #[kube(
     kind = "FleetAddonConfig",
     group = "addons.cluster.x-k8s.io",
     version = "v1alpha1",
-    status = "FleetAddonConfigStatus"
+    status = "FleetAddonConfigStatus",
+    rule = Rule::new("self.metadata.name == 'fleet-addon-config'"),
 )]
 #[serde(rename_all = "camelCase")]
 pub struct FleetAddonConfigSpec {

@@ -124,5 +124,4 @@ spec:
                   path: /lib/modules
     name: kindnet.yaml
   targets:
-  - clusterGroup: quick-start
   - clusterName: docker-demo

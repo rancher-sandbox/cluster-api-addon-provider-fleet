@@ -5,14 +5,14 @@ metadata:
 spec:
   config:
     server:
-      inferLocal: true
+      inferLocal: true # Uses default `kuberenetes` endpoint and secret for APIServerURL configuration
   clusterClass:
     patchResource: true
     setOwnerReferences: true
   cluster:
+    hostNetwork: true # Deploy Fleet with hostNetwork: true setting to allow rollout in tainted node
     patchResource: true
     setOwnerReferences: true
-    hostNetwork: true
     selector:
       matchLabels:
         import: ""
@@ -20,5 +20,5 @@ spec:
       matchLabels:
         import: ""
   install:
-    version: v0.12.0-alpha.3
+    version: v0.12.0-alpha.6 # We will install alpha for helmapp support
 

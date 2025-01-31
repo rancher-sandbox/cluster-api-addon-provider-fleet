@@ -201,6 +201,7 @@ spec:
                     type: string
                 type: object
             type: object
+            x-kubernetes-validations: []
           status:
             nullable: true
             properties:
@@ -210,8 +211,10 @@ spec:
             type: object
         required:
         - spec
-        title: FleetAddonConfig
+        title: FleetAddonConfig_kube_validation
         type: object
+        x-kubernetes-validations:
+        - rule: self.metadata.name == 'fleet-addon-config'
     served: true
     storage: true
     subresources:
