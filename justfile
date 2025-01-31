@@ -1,5 +1,5 @@
 NAME := "cluster-api-addon-provider-fleet"
-KUBE_VERSION := env_var_or_default('KUBE_VERSION', '1.32.1')
+KUBE_VERSION := env_var_or_default('KUBE_VERSION', '1.32.0')
 ORG := "ghcr.io/rancher-sandbox"
 TAG := "dev"
 HOME_DIR := env_var('HOME')
