@@ -94,8 +94,11 @@ stop-dev:
     kind delete cluster --name dev || true
 
 # Deploy CRS to dev cluster
-deploy-cni:
+deploy-kindnet:
     kubectl --context kind-dev apply -f testdata/cni.yaml
+
+deploy-calico:
+    kubectl --context kind-dev apply -f testdata/helm.yaml
 
 # Deploy an example app bundle to the cluster
 deploy-app:
@@ -145,7 +148,7 @@ release-manifests: _create-out-dir _download-kustomize
     kustomize build config/default > {{OUT_DIR}}/addon-components.yaml
 
 # Full e2e test of importing cluster in fleet
-test-import: start-dev deploy deploy-child-cluster deploy-cni deploy-app && collect-test-import
+test-import: start-dev deploy deploy-child-cluster deploy-kindnet deploy-app && collect-test-import
     kubectl wait pods --for=condition=Ready --timeout=150s --all --all-namespaces
     kubectl wait cluster --timeout=500s --for=condition=ControlPlaneReady=true docker-demo
     kubectl wait clusters.fleet.cattle.io --timeout=300s --for=condition=Ready=true docker-demo
@@ -155,7 +158,7 @@ collect-test-import:
     -just collect-artifacts docker-demo
 
 # Full e2e test of importing cluster in fleet
-test-cluster-class-import: start-dev deploy deploy-child-cluster-class deploy-cni deploy-app _test-import-all && collect-test-cluster-class-import
+test-cluster-class-import: start-dev deploy deploy-child-cluster-class deploy-calico deploy-app _test-import-all && collect-test-cluster-class-import
 
 collect-test-cluster-class-import:
     -just collect-artifacts dev
@@ -165,7 +168,7 @@ collect-test-cluster-class-import:
 test-cluster-class-import-agent-initated: start-dev && collect-test-cluster-class-import
     just deploy "agent-initiated"
     just deploy-child-cluster-class
-    just deploy-cni
+    just deploy-kindnet
     just deploy-app
     just _test-import-all
 
