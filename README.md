@@ -56,7 +56,7 @@ spec:
     version: v0.12.0-alpha.6 # We will install alpha for helmapp support
 ```
 
-You can also define your `API` server `URL` and cerfificates config map, which has a `ca.crt` key:
+You can also define your `API` server `URL` and certificates `ConfigMap` or `Secret`, which has a `ca.crt` data key:
 
 ```yaml
 apiversion: addons.cluster.x-k8s.io/v1alpha1
@@ -73,7 +73,7 @@ spec:
         name: kube-root-ca.crt
         namespace: default
   install:
-    version: v0.12.0-alpha.6
+    followLatest: true # Installs current latest version of fleet from https://github.com/rancher/fleet-helm-charts
 ```
 
 
