@@ -16,6 +16,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      actions: read
+      id-token: write
     steps:
       - name: Install just
         uses: extractions/setup-just@v2
@@ -45,6 +47,31 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+      - name: Read prime registry secrets
+        uses: rancher-eio/read-vault-secrets@main
+        with:
+          secrets: |
+            secret/data/github/repo/${{ github.repository }}/rancher-prime-registry/credentials username |  PRIME-REGISTRY-USERNAME;
+            secret/data/github/repo/${{ github.repository }}/rancher-prime-registry/credentials password |  PRIME-REGISTRY-PASSWORD;
+            secret/data/github/repo/${{ github.repository }}/rancher-prime-registry/credentials registry |  PRIME-REGISTRY-REGISTRY;
+      - name: Docker login to prime registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.PRIME-REGISTRY-REGISTRY }}
+          username: ${{ env.PRIME-REGISTRY-USERNAME }}
+          password: ${{ env.PRIME-REGISTRY-PASSWORD }}
+      - name: Extract metadata (tags, labels) for Docker (prime registry)
+        id: meta-prime
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.PRIME-REGISTRY-REGISTRY }}/${{ env.IMAGE_NAME }}
+      - name: Build and push docker image to prime registry
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta-prime.outputs.tags }}
+          labels: ${{ steps.meta-prime.outputs.labels }}
   release:
     runs-on: ubuntu-latest
     permissions:
