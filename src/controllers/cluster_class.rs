@@ -4,8 +4,7 @@ use crate::api::fleet_addon_config::{ClusterClassConfig, FleetAddonConfig};
 use crate::api::fleet_clustergroup::ClusterGroup;
 
 use fleet_api_rs::fleet_clustergroup::{ClusterGroupSelector, ClusterGroupSpec};
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
-use kube::api::{ObjectMeta, TypeMeta};
+use kube::api::{ObjectMeta, PatchParams, TypeMeta};
 
 use kube::{api::ResourceExt, runtime::controller::Action, Resource};
 
@@ -17,6 +16,8 @@ use super::controller::{
 use super::{BundleResult, GroupSyncResult};
 
 pub static CLUSTER_CLASS_LABEL: &str = "clusterclass-name.fleet.addons.cluster.x-k8s.io";
+pub static CLUSTER_CLASS_NAMESPACE_LABEL: &str =
+    "clusterclass-namespace.fleet.addons.cluster.x-k8s.io";
 
 pub struct FleetClusterClassBundle {
     fleet_group: ClusterGroup,
@@ -25,28 +26,31 @@ pub struct FleetClusterClassBundle {
 
 impl From<&ClusterClass> for ClusterGroup {
     fn from(cluster_class: &ClusterClass) -> Self {
+        let labels = {
+            let mut labels = cluster_class.labels().clone();
+            labels.insert(CLUSTER_CLASS_LABEL.to_string(), cluster_class.name_any());
+            labels.insert(
+                CLUSTER_CLASS_NAMESPACE_LABEL.to_string(),
+                cluster_class.namespace().unwrap_or_default(),
+            );
+            Some(labels)
+        };
         Self {
             types: Some(TypeMeta::resource::<ClusterGroup>()),
             metadata: ObjectMeta {
                 name: Some(cluster_class.name_any()),
                 namespace: cluster_class.meta().namespace.clone(),
-                labels: Some(cluster_class.labels().clone()),
+                labels: labels.clone(),
                 owner_references: cluster_class
-                    .controller_owner_ref(&())
+                    .owner_ref(&())
                     .into_iter()
-                    .map(|r| OwnerReference {
-                        controller: None,
-                        ..r
-                    })
                     .map(Into::into)
                     .collect(),
                 ..Default::default()
             },
             spec: ClusterGroupSpec {
                 selector: Some(ClusterGroupSelector {
-                    match_labels: Some(
-                        [(CLUSTER_CLASS_LABEL.to_string(), cluster_class.name_any())].into(),
-                    ),
+                    match_labels: labels,
                     ..Default::default()
                 }),
             },
@@ -59,7 +63,14 @@ impl FleetBundle for FleetClusterClassBundle {
     #[allow(refining_impl_trait)]
     async fn sync(&self, ctx: Arc<Context>) -> GroupSyncResult<Action> {
         match self.config.cluster_class_patch_enabled() {
-            true => patch(ctx, self.fleet_group.clone()).await?,
+            true => {
+                patch(
+                    ctx,
+                    self.fleet_group.clone(),
+                    &PatchParams::apply("addon-provider-fleet"),
+                )
+                .await?
+            }
             false => get_or_create(ctx.clone(), self.fleet_group.clone()).await?,
         };
 

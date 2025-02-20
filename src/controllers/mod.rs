@@ -25,6 +25,9 @@ pub enum ClusterSyncError {
     #[error("Cluster update error: {0}")]
     PatchError(#[from] PatchError),
 
+    #[error("Cluster group update error: {0}")]
+    GroupPatchError(#[source] PatchError),
+
     #[error("Cluster json encoding error: {0}")]
     ClusterEncodeError(#[from] serde_json::Error),
 }

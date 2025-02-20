@@ -28,10 +28,104 @@ spec:
                   This will create Fleet Cluster for each Cluster with the same name. In case the cluster specifies topology.class, the name of the ClusterClass will be added to the Fleet Cluster labels.
                 nullable: true
                 properties:
+                  agentEnvVars:
+                    description: AgentEnvVars are extra environment variables to be added to the agent deployment.
+                    items:
+                      description: EnvVar represents an environment variable present in a Container.
+                      properties:
+                        name:
+                          description: Name of the environment variable. Must be a C_IDENTIFIER.
+                          type: string
+                        value:
+                          description: 'Variable references $(VAR_NAME) are expanded using the previously defined environment variables in the container and any service environment variables. If a variable cannot be resolved, the reference in the input string will be unchanged. Double $$ are reduced to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e. "$$(VAR_NAME)" will produce the string literal "$(VAR_NAME)". Escaped references will never be expanded, regardless of whether the variable exists or not. Defaults to "".'
+                          nullable: true
+                          type: string
+                        valueFrom:
+                          description: Source for the environment variable's value. Cannot be used if value is not empty.
+                          nullable: true
+                          properties:
+                            configMapKeyRef:
+                              description: Selects a key of a ConfigMap.
+                              nullable: true
+                              properties:
+                                key:
+                                  description: The key to select.
+                                  type: string
+                                name:
+                                  description: 'Name of the referent. This field is effectively required, but due to backwards compatibility is allowed to be empty. Instances of this type with an empty value here are almost certainly wrong. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names'
+                                  nullable: true
+                                  type: string
+                                optional:
+                                  description: Specify whether the ConfigMap or its key must be defined
+                                  nullable: true
+                                  type: boolean
+                              required:
+                              - key
+                              type: object
+                            fieldRef:
+                              description: 'Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels[''<KEY>'']`, `metadata.annotations[''<KEY>'']`, spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.'
+                              nullable: true
+                              properties:
+                                apiVersion:
+                                  description: Version of the schema the FieldPath is written in terms of, defaults to "v1".
+                                  nullable: true
+                                  type: string
+                                fieldPath:
+                                  description: Path of the field to select in the specified API version.
+                                  type: string
+                              required:
+                              - fieldPath
+                              type: object
+                            resourceFieldRef:
+                              description: 'Selects a resource of the container: only resources limits and requests (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.'
+                              nullable: true
+                              properties:
+                                containerName:
+                                  description: 'Container name: required for volumes, optional for env vars'
+                                  nullable: true
+                                  type: string
+                                divisor:
+                                  description: Specifies the output format of the exposed resources, defaults to "1"
+                                  nullable: true
+                                  x-kubernetes-int-or-string: true
+                                resource:
+                                  description: 'Required: resource to select'
+                                  type: string
+                              required:
+                              - resource
+                              type: object
+                            secretKeyRef:
+                              description: Selects a key of a secret in the pod's namespace
+                              nullable: true
+                              properties:
+                                key:
+                                  description: The key of the secret to select from.  Must be a valid secret key.
+                                  type: string
+                                name:
+                                  description: 'Name of the referent. This field is effectively required, but due to backwards compatibility is allowed to be empty. Instances of this type with an empty value here are almost certainly wrong. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names'
+                                  nullable: true
+                                  type: string
+                                optional:
+                                  description: Specify whether the Secret or its key must be defined
+                                  nullable: true
+                                  type: boolean
+                              required:
+                              - key
+                              type: object
+                          type: object
+                      required:
+                      - name
+                      type: object
+                    nullable: true
+                    type: array
                   agentNamespace:
                     description: Namespace selection for the fleet agent
                     nullable: true
                     type: string
+                  applyClassGroup:
+                    description: Apply a ClusterGroup for a ClusterClass referenced from a different namespace.
+                    nullable: true
+                    type: boolean
                   hostNetwork:
                     description: 'Host network allows to deploy agent configuration using hostNetwork: true setting which eludes dependency on the CNI configuration for the cluster.'
                     nullable: true

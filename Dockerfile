@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM registry.suse.com/bci/rust:1.83 AS build
+FROM --platform=$BUILDPLATFORM registry.suse.com/bci/rust:1.84 AS build
 LABEL org.opencontainers.image.source=https://github.com/rancher-sandbox/cluster-api-addon-provider-fleet
 COPY --chown=nonroot:nonroot ./ /src/
 WORKDIR /src

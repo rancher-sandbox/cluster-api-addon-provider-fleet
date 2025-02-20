@@ -89,7 +89,7 @@ where
     Ok(Action::await_change())
 }
 
-pub(crate) async fn patch<R>(ctx: Arc<Context>, res: R) -> PatchResult<Action>
+pub(crate) async fn patch<R>(ctx: Arc<Context>, res: R, pp: &PatchParams) -> PatchResult<Action>
 where
     R: std::fmt::Debug,
     R: Clone + Serialize + DeserializeOwned,
@@ -106,13 +106,9 @@ where
     let mut res = res.clone();
     res.meta_mut().managed_fields = None;
 
-    api.patch(
-        &res.name_any(),
-        &PatchParams::apply("addon-provider-fleet"),
-        &Patch::Apply(res.clone()),
-    )
-    .await
-    .map_err(PatchError::Patch)?;
+    api.patch(&res.name_any(), pp, &Patch::Apply(res.clone()))
+        .await
+        .map_err(PatchError::Patch)?;
 
     info!("Updated fleet object");
     ctx.diagnostics

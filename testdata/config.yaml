@@ -13,6 +13,7 @@ spec:
     hostNetwork: true # Deploy Fleet with hostNetwork: true setting to allow rollout in tainted node
     patchResource: true
     setOwnerReferences: true
+    applyClassGroup: true
     selector:
       matchLabels:
         import: ""
