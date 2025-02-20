@@ -20,5 +20,5 @@ spec:
       matchLabels:
         import: ""
   install:
-    version: v0.12.0-alpha.6 # We will install alpha for helmapp support
+    version: v0.12.0-alpha.14 # We will install alpha for helmapp support
 
