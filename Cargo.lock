@@ -638,9 +638,9 @@ dependencies = [
 
 [[package]]
 name = "cluster-api-rs"
-version = "1.9.4"
+version = "1.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9838500a114353b51dd6a49c2c246709d69467f76f912e6b2a82eb24df572517"
+checksum = "576cb6af65b9efcb0712e0e261aa50127a4b3467f85d51c1c5199cc1b6bc062c"
 dependencies = [
  "k8s-openapi",
  "kube",
