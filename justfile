@@ -82,7 +82,7 @@ load-base features="":
     kind load docker-image {{ORG}}/{{NAME}}:{{TAG}} --name dev
 
 # Start local dev environment
-start-dev: _cleanup-out-dir _create-out-dir
+start-dev: _cleanup-out-dir _create-out-dir _download-kubectl
     just update-helm-repos
     kind delete cluster --name dev || true
     kind create cluster --image=kindest/node:v{{KUBE_VERSION}} --config testdata/kind-config.yaml
@@ -180,8 +180,13 @@ collect-artifacts cluster:
 [private]
 _test-import-all:
     kubectl wait pods --for=condition=Ready --timeout=150s --all --all-namespaces
-    kubectl wait clustergroups.fleet.cattle.io --timeout=150s --for=jsonpath='{.status.clusterCount}=1' quick-start
-    kubectl wait clustergroups.fleet.cattle.io --timeout=300s --for=condition=Ready=true quick-start
+    kubectl wait clustergroups.fleet.cattle.io -n clusterclass --timeout=300s --for=condition=Ready=true quick-start
+    kubectl wait clustergroups.fleet.cattle.io -n clusterclass --timeout=300s --for=condition=Ready=true quick-start
+    # Verify that cluster group created for cluster referencing clusterclass in a different namespace
+    kubectl wait clustergroups.fleet.cattle.io --timeout=150s --for=create quick-start.clusterclass
+    kubectl wait clustergroups.fleet.cattle.io --timeout=150s --for=jsonpath='{.status.clusterCount}=1' quick-start.clusterclass
+    kubectl wait clustergroups.fleet.cattle.io --timeout=300s --for=condition=Ready=true quick-start.clusterclass
+    kubectl wait clusters.fleet.cattle.io --timeout=150s --for=create capi-quickstart
     kubectl wait clusters.fleet.cattle.io --timeout=300s --for=condition=Ready=true capi-quickstart
 
 # Install kopium
@@ -261,3 +266,22 @@ _download-crust-gather: _create-out-dir
     [ -z `which crust-gather` ] || [ {{REFRESH_BIN}} != "0" ] || exit 0
     curl -sSfL https://github.com/crust-gather/crust-gather/raw/main/install.sh | sh -s - -f -b {{OUT_DIR}}
 
+[private]
+[linux]
+_download-kubectl: _create-out-dir
+    #!/usr/bin/env bash
+    set -euxo pipefail
+    [ -z `which kubectl` ] || [ {{REFRESH_BIN}} != "0" ] || exit 0
+    cd {{OUT_DIR}}
+    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/{{ARCH}}/kubectl"
+    chmod +x kubectl
+
+[private]
+[macos]
+_download-kubectl: _create-out-dir
+    #!/usr/bin/env bash
+    set -euxo pipefail
+    [ -z `which kubectl` ] || [ {{REFRESH_BIN}} != "0" ] || exit 0
+    cd {{OUT_DIR}}
+    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/darwin/{{ARCH}}/kubectl"
+    chmod +x kubectl

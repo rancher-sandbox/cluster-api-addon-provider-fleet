@@ -86,6 +86,10 @@ impl Default for ClusterClassConfig {
 #[derive(Serialize, Deserialize, Clone, Debug, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ClusterConfig {
+    /// Apply a ClusterGroup for a ClusterClass referenced from a different namespace.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub apply_class_group: Option<bool>,
+
     /// Allow to patch resources, maintaining the desired state.
     /// If is not set, resources will only be re-created in case of removal.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -153,6 +157,7 @@ pub struct NamingStrategy {
 impl Default for ClusterConfig {
     fn default() -> Self {
         Self {
+            apply_class_group: Some(true),
             set_owner_references: Some(true),
             naming: Default::default(),
             agent_namespace: AGENT_NAMESPACE.to_string().into(),
