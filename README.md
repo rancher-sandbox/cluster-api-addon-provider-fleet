@@ -53,7 +53,7 @@ spec:
     server:
       inferLocal: true # Uses default `kuberenetes` endpoint and secret for APIServerURL configuration
   install:
-    version: v0.12.0-alpha.6 # We will install alpha for helmapp support
+    version: v0.12.0-alpha.14 # We will install alpha for helmapp support
 ```
 
 You can also define your `API` server `URL` and certificates `ConfigMap` or `Secret`, which has a `ca.crt` data key:

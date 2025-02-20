@@ -146,6 +146,7 @@ impl Cluster {
                     client_id: Some(Alphanumeric.sample_string(&mut rand::rng(), 64)),
                     agent_namespace: config.agent_install_namespace().into(),
                     host_network: config.host_network,
+                    agent_env_vars: config.agent_env_vars,
                     agent_tolerations,
                     ..Default::default()
                 }
@@ -154,6 +155,7 @@ impl Cluster {
                     kube_config_secret: Some(format!("{}-kubeconfig", self.name_any())),
                     agent_namespace: config.agent_install_namespace().into(),
                     host_network: config.host_network,
+                    agent_env_vars: config.agent_env_vars,
                     agent_tolerations,
                     ..Default::default()
                 }
@@ -164,6 +166,7 @@ impl Cluster {
                 kube_config_secret: Some(format!("{}-kubeconfig", self.name_any())),
                 agent_namespace: config.agent_install_namespace().into(),
                 host_network: config.host_network,
+                agent_env_vars: config.agent_env_vars,
                 agent_tolerations,
                 ..Default::default()
             },

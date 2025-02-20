@@ -1,8 +1,10 @@
+use fleet_api_rs::fleet_cluster::ClusterAgentEnvVars;
 use k8s_openapi::{
     api::core::v1::ObjectReference, apimachinery::pkg::apis::meta::v1::LabelSelector,
 };
 use kube::{
-    core::{ParseExpressionError, Selector}, CELSchema, CustomResource
+    core::{ParseExpressionError, Selector},
+    CELSchema, CustomResource,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -63,10 +65,12 @@ pub struct FleetAddonConfigStatus {
 #[serde(rename_all = "camelCase")]
 pub struct ClusterClassConfig {
     /// Setting to disable setting owner references on the created resources
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub set_owner_references: Option<bool>,
 
     /// Allow to patch resources, maintaining the desired state.
     /// If is not set, resources will only be re-created in case of removal.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub patch_resource: Option<bool>,
 }
 
@@ -84,31 +88,38 @@ impl Default for ClusterClassConfig {
 pub struct ClusterConfig {
     /// Allow to patch resources, maintaining the desired state.
     /// If is not set, resources will only be re-created in case of removal.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub patch_resource: Option<bool>,
 
     /// Setting to disable setting owner references on the created resources
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub set_owner_references: Option<bool>,
 
     /// Naming settings for the fleet cluster
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub naming: Option<NamingStrategy>,
 
     /// Namespace selection for the fleet agent
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub agent_namespace: Option<String>,
 
     /// Host network allows to deploy agent configuration using hostNetwork: true setting
     /// which eludes dependency on the CNI configuration for the cluster.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub host_network: Option<bool>,
+
+    /// AgentEnvVars are extra environment variables to be added to the agent deployment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_env_vars: Option<Vec<ClusterAgentEnvVars>>,
 
     /// Import settings for the CAPI cluster. Allows to import clusters based on a set of labels,
     /// set on the cluster or the namespace.
     #[serde(flatten)]
     pub selectors: Selectors,
 
-    // /// Cluster label selector. If set, only clusters matching label selector will be imported.
-    // /// WARN: this field controls the state of opened watches to the cluster. If changed, requires controller to be reloaded.
-    // pub cluster: Option<LabelSelector>,
     #[cfg(feature = "agent-initiated")]
     /// Prepare initial cluster for agent initiated connection
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub agent_initiated: Option<bool>,
 }
 
@@ -150,6 +161,7 @@ impl Default for ClusterConfig {
             agent_initiated: Some(true),
             selectors: Default::default(),
             patch_resource: Some(true),
+            agent_env_vars: None,
         }
     }
 }
