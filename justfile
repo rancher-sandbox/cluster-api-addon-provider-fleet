@@ -58,7 +58,7 @@ compile features="":  _create-out-dir
 [private]
 _build features="":
   just compile {{features}}
-  docker build -t {{ORG}}/{{NAME}}:{{TAG}} .
+  docker buildx build -t {{ORG}}/{{NAME}}:{{TAG}} .
 
 # docker build base
 build-base: (_build "")
@@ -71,7 +71,7 @@ build-otel: (_build "telemetry")
 
 # Build  docker image
 docker-build:
-    docker build . -t {{ORG}}/{{NAME}}:{{TAG}}
+    docker buildx build . -t {{ORG}}/{{NAME}}:{{TAG}}
 
 # Push the docker images
 docker-push:
