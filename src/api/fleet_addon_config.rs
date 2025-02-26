@@ -233,11 +233,9 @@ impl NamingStrategy {
 #[serde(rename_all = "camelCase")]
 pub struct Selectors {
     /// Namespace label selector. If set, only clusters in the namespace matching label selector will be imported.
-    /// WARN: this field controls the state of opened watches to the cluster. If changed, requires controller to be reloaded.
     pub namespace_selector: LabelSelector,
 
     /// Cluster label selector. If set, only clusters matching label selector will be imported.
-    /// WARN: this field controls the state of opened watches to the cluster. If changed, requires controller to be reloaded.
     pub selector: LabelSelector,
 }
 
