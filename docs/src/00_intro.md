@@ -1,8 +1,4 @@
-# Cluster API Add-on Provider for Fleet
-
-> NOTE: The project is looking for more contributors.
-
-## What is Cluster API Add-on Provider for Fleet (CAAPF)?
+# What is Cluster API Add-on Provider for Fleet (CAAPF)?
 
 Cluster API Add-on Provider for Fleet (CAAPF) is a Cluster API (CAPI) provider that provides integration with [Fleet](https://github.com/rancher/fleet) to enable the easy deployment of applications to a CAPI provisioned cluster.
 
@@ -13,17 +9,8 @@ It provides the following functionality:
 - The provider will automatically create a [Fleet Cluster Group](https://fleet.rancher.io/cluster-group) for every [CAPI ClusterClass](https://cluster-api.sigs.k8s.io/tasks/experimental-features/cluster-class/). This enables you to deploy the same applications to all clusters created from the same ClusterClass.
 - `CAPI` `Cluster`, `ControlPlane` resources are automatically added to the `Fleet` `Cluster` resource templates, allowing to perform per-cluster configuration templating for `Helm` based installations.
 
-## Getting started
 
-You can refer to the provider [documentation](https://rancher-sandbox.github.io/cluster-api-addon-provider-fleet/) and the official `Fleet` [documentation](https://fleet.rancher.io/).
-
-## Installation
-
-Refer to the book [installation](./docs/book/02_getting_started/01_installation) section.
-
-## Configuration
-
-Refer to the book [configuration](./docs/book/03_tutorials/02_configuration) section
+{{#include ./02_getting_started/01_installation.md}}
 
 ## Demo
 
@@ -32,7 +19,3 @@ Refer to the book [configuration](./docs/book/03_tutorials/02_configuration) sec
 ## Calico CNI installation demo
 
 <script src="https://asciinema.org/a/700924.js" id="asciicast-700924" async="true"></script>
-
-## Get in contact
-
-You can get in contact with us via the [#cluster-api](https://rancher-users.slack.com/archives/C060L985ZGC) channel on the [Rancher Users Slack](https://slack.rancher.io/).

@@ -4,7 +4,7 @@ ORG := "ghcr.io/rancher-sandbox"
 TAG := "dev"
 HOME_DIR := env_var('HOME')
 YQ_VERSION := "v4.43.1"
-CLUSTERCTL_VERSION := "v1.9.4"
+CLUSTERCTL_VERSION := "v1.9.5"
 OUT_DIR := "_out"
 KUSTOMIZE_VERSION := "v5.4.1"
 ARCH := if arch() == "aarch64" { "arm64"} else { "amd64" }
