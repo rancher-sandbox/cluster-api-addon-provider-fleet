@@ -27,11 +27,11 @@ Refer to the book [configuration](./docs/book/03_tutorials/02_configuration) sec
 
 ## Demo
 
-<script src="https://asciinema.org/a/659626.js" id="asciicast-659626" async="true"></script>
+[![asciicast](https://asciinema.org/a/659626.svg)](https://asciinema.org/a/659626)
 
 ## Calico CNI installation demo
 
-<script src="https://asciinema.org/a/700924.js" id="asciicast-700924" async="true"></script>
+[![asciicast](https://asciinema.org/a/700924.svg)](https://asciinema.org/a/700924)
 
 ## Get in contact
 
