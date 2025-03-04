@@ -8,6 +8,7 @@ use kube::api::{ObjectMeta, PatchParams, TypeMeta};
 
 use kube::{api::ResourceExt, runtime::controller::Action, Resource};
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use super::controller::{
@@ -27,7 +28,7 @@ pub struct FleetClusterClassBundle {
 impl From<&ClusterClass> for ClusterGroup {
     fn from(cluster_class: &ClusterClass) -> Self {
         let labels = {
-            let mut labels = cluster_class.labels().clone();
+            let mut labels = BTreeMap::default();
             labels.insert(CLUSTER_CLASS_LABEL.to_string(), cluster_class.name_any());
             labels.insert(
                 CLUSTER_CLASS_NAMESPACE_LABEL.to_string(),
