@@ -67,3 +67,25 @@ jobs:
         with:
           name: artifacts-import
           path: _out/gather
+  test-e2e-import-rke2:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install just
+        uses: extractions/setup-just@v2
+      - name: Install kind
+        uses: helm/kind-action@v1
+        with:
+          install_only: true
+          version: v0.26.0
+      - uses: actions/checkout@v4
+      - name: Test
+        run: just test-import-rke2
+      - name: Collect artifacts
+        if: always()
+        run: just collect-test-import
+      - name: Store run artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: artifacts-import-rke2
+          path: _out/gather

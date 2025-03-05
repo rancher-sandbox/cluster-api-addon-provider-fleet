@@ -3,7 +3,8 @@
 <div class="warning">
 
 Note: For this setup to work, you need to install Fleet and Fleet CRDs charts via
-`FleetAddonConfig` resource. Both need to have version version >= v0.12.0-alpha.14, which provides support
+`FleetAddonConfig` resource. Both need to have version >= v0.12.0-alpha.14,
+which provides support for `HelmApp` resource.
 
 </div>
 
@@ -13,7 +14,7 @@ In this tutorial we will deploy `Calico` CNI using `HelmApp` resource and `Fleet
 
 Here's an example of how a `HelmApp` resource can be used in combination with templateValues to deploy application consistently on any matching cluster.
 
-In this scenario we are matching cluster directly by name, using `clusterName` reference, but a `clusterGroup` or a label based selection can be used instead:
+In this scenario we are matching cluster directly by name, using `clusterName` reference, but a `clusterGroup` or a label based selection can be used instead or together with `clusterName`:
 ```yaml
   targets:
   - clusterName: docker-demo
@@ -22,33 +23,7 @@ In this scenario we are matching cluster directly by name, using `clusterName` r
 We are deploying `HelmApp` resource in the `default` namespace. The namespace should be the same for the CAPI Cluster for fleet to locate it.
 
 ```yaml
-apiVersion: fleet.cattle.io/v1alpha1
-kind: HelmApp
-metadata:
-  name: calico
-spec:
-  helm:
-    releaseName: projectcalico
-    repo: https://docs.tigera.io/calico/charts
-    chart: tigera-operator
-    templateValues:
-      installation: |-
-        cni:
-          type: Calico
-          ipam:
-            type: HostLocal
-        calicoNetwork:
-          bgp: Disabled
-          mtu: 1350
-          ipPools:
-            ${- range $cidr := .ClusterValues.Cluster.spec.clusterNetwork.pods.cidrBlocks }
-            - cidr: "${ $cidr }"
-              encapsulation: None
-              natOutgoing: Enabled
-              nodeSelector: all()${- end}
-  insecureSkipTLSVerify: true
-  targets:
-  - clusterName: docker-demo
+{{#include ../../../testdata/helm.yaml}}
 ```
 
 `HelmApp` supports fleet [templating][] options, otherwise available exclusively to the `fleet.yaml` configuration, stored in the [git repository contents][], and applied via the `GitRepo` resource.
