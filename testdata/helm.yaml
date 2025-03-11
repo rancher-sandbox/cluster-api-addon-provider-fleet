@@ -25,4 +25,4 @@ spec:
   insecureSkipTLSVerify: true
   targets:
   - clusterName: docker-demo
-  - clusterGroup: quick-start
+  - clusterGroup: quick-start.clusterclass

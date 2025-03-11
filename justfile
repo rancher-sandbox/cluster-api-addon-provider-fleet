@@ -57,7 +57,6 @@ compile features="":  _create-out-dir
 
 [private]
 _build features="":
-  just compile {{features}}
   docker buildx build -t {{ORG}}/{{NAME}}:{{TAG}} .
 
 # docker build base
@@ -76,6 +75,10 @@ docker-build:
 # Push the docker images
 docker-push:
     docker push {{ORG}}/{{NAME}}:{{TAG}}
+
+build-and-load:
+    docker build . -t {{ORG}}/{{NAME}}:{{TAG}}
+    kind load docker-image {{ORG}}/{{NAME}}:{{TAG}} --name dev
 
 load-base features="":
     just _build {{features}}
@@ -131,11 +134,7 @@ deploy-child-cluster-class:
 
 # Add and update helm repos used
 update-helm-repos:
-    #helm repo add gitea-charts https://dl.gitea.com/charts/
     helm repo add fleet https://rancher.github.io/fleet-helm-charts/
-    #helm repo add jetstack https://charts.jetstack.io
-    #helm repo add traefik https://traefik.github.io/charts
-    #helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
     helm repo update
 
 # Install fleet into the k8s cluster
@@ -152,7 +151,7 @@ install-capi: _download-clusterctl
 # Deploy will deploy the operator
 deploy features="": _download-kustomize
     just generate {{features}}
-    just load-base {{features}}
+    just build-and-load
     kustomize build config/default | kubectl apply -f -
     kubectl --context kind-dev apply -f testdata/config.yaml
     kubectl wait fleetaddonconfigs fleet-addon-config --for=jsonpath='{.status.installedVersion}' --timeout=150s
