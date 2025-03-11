@@ -1,0 +1,13 @@
+apiVersion: fleet.cattle.io/v1alpha1
+kind: GitRepo
+metadata:
+  name: calico
+spec:
+  branch: main
+  paths:
+  - /fleet/applications/calico
+  repo: https://github.com/rancher-sandbox/cluster-api-addon-provider-fleet.git
+  targets:
+  - clusterSelector:
+      matchLabels:
+        cni: calico

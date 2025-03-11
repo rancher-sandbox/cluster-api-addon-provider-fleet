@@ -19,8 +19,6 @@ Fleet mainly relies on `Cluster` labels, `Cluster` names and `ClusterGroups` whe
 
 `FleetAddonConfig` provides several configuration options to define clusters to import.
 
-**Note: Please be aware that chaning selection configuration requires restart of the `CAAPF` instance, as these selection options directly translate into watch configurations for controllers established on the `API` server.**
-
 ### Namespace Label Selection
 
 This section defines how to select namespaces based on specific labels. The `namespaceSelector` field ensures that the import strategy applies only to namespaces that have the label `import: "true"`. This is useful for scoping automatic import to specific namespaces rather than applying it cluster-wide.

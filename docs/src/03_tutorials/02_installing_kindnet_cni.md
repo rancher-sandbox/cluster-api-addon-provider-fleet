@@ -47,3 +47,7 @@ This should result in a `kindnet` running on the matching cluster:
 kube-system         kindnet-dqzwh                                         1/1     Running   0          2m11s
 kube-system         kindnet-jbkjq                                         1/1     Running   0          2m11s
 ```
+
+### Demo
+
+<script src="https://asciinema.org/a/6x8WmsCXJQdDswAwfYHQlaVsj.js" id="asciicast-6x8WmsCXJQdDswAwfYHQlaVsj" async="true" data-start-at="327"></script>
