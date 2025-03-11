@@ -29,7 +29,7 @@ spec:
     server:
       inferLocal: true # Uses default `kuberenetes` endpoint and secret for APIServerURL configuration
   install:
-    version: v0.12.0-alpha.14 # We will install alpha for helmapp support
+    version: v0.12.0-beta.1 # We will install alpha for helmapp support
 ```
 
 ### Fleet Public URL and Certificate setup
@@ -52,7 +52,7 @@ spec:
     server:
       inferLocal: true # Uses default `kuberenetes` endpoint and secret for APIServerURL configuration
   install:
-    version: v0.12.0-alpha.14 # We will install alpha for helmapp support
+    version: v0.12.0-beta.1 # We will install alpha for helmapp support
 ```
 
 This scenario works well in a test setup, while using CAPI docker provider and docker clusters.

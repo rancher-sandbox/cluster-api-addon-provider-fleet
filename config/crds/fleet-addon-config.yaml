@@ -122,6 +122,35 @@ spec:
                     description: Namespace selection for the fleet agent
                     nullable: true
                     type: string
+                  agentTolerations:
+                    description: Agent taint toleration settings for every cluster
+                    items:
+                      description: The pod this Toleration is attached to tolerates any taint that matches the triple <key,value,effect> using the matching operator <operator>.
+                      properties:
+                        effect:
+                          description: Effect indicates the taint effect to match. Empty means match all taint effects. When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                          nullable: true
+                          type: string
+                        key:
+                          description: Key is the taint key that the toleration applies to. Empty means match all taint keys. If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                          nullable: true
+                          type: string
+                        operator:
+                          description: Operator represents a key's relationship to the value. Valid operators are Exists and Equal. Defaults to Equal. Exists is equivalent to wildcard for value, so that a pod can tolerate all taints of a particular category.
+                          nullable: true
+                          type: string
+                        tolerationSeconds:
+                          description: TolerationSeconds represents the period of time the toleration (which must be of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default, it is not set, which means tolerate the taint forever (do not evict). Zero and negative values will be treated as 0 (evict immediately) by the system.
+                          format: int64
+                          nullable: true
+                          type: integer
+                        value:
+                          description: Value is the taint value the toleration matches to. If the operator is Exists, the value should be empty, otherwise just a regular string.
+                          nullable: true
+                          type: string
+                      type: object
+                    nullable: true
+                    type: array
                   applyClassGroup:
                     description: Apply a ClusterGroup for a ClusterClass referenced from a different namespace.
                     nullable: true
@@ -131,7 +160,7 @@ spec:
                     nullable: true
                     type: boolean
                   namespaceSelector:
-                    description: 'Namespace label selector. If set, only clusters in the namespace matching label selector will be imported. WARN: this field controls the state of opened watches to the cluster. If changed, requires controller to be reloaded.'
+                    description: Namespace label selector. If set, only clusters in the namespace matching label selector will be imported.
                     properties:
                       matchExpressions:
                         description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
@@ -178,7 +207,7 @@ spec:
                     nullable: true
                     type: boolean
                   selector:
-                    description: 'Cluster label selector. If set, only clusters matching label selector will be imported. WARN: this field controls the state of opened watches to the cluster. If changed, requires controller to be reloaded.'
+                    description: Cluster label selector. If set, only clusters matching label selector will be imported.
                     properties:
                       matchExpressions:
                         description: matchExpressions is a list of label selector requirements. The requirements are ANDed.

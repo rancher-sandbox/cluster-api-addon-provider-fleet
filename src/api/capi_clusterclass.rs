@@ -1,5 +1,8 @@
 use cluster_api_rs::capi_clusterclass::{ClusterClassSpec, ClusterClassStatus};
-use kube::{api::{ObjectMeta, TypeMeta}, Resource};
+use kube::{
+    api::{ObjectMeta, TypeMeta},
+    Resource,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Resource, Serialize, Deserialize, Clone, Debug, Default, PartialEq)]

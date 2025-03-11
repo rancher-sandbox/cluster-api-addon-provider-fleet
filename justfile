@@ -57,7 +57,6 @@ compile features="":  _create-out-dir
 
 [private]
 _build features="":
-  just compile {{features}}
   docker buildx build -t {{ORG}}/{{NAME}}:{{TAG}} .
 
 # docker build base
@@ -76,6 +75,10 @@ docker-build:
 # Push the docker images
 docker-push:
     docker push {{ORG}}/{{NAME}}:{{TAG}}
+
+build-and-load:
+    docker build . -t {{ORG}}/{{NAME}}:{{TAG}}
+    kind load docker-image {{ORG}}/{{NAME}}:{{TAG}} --name dev
 
 load-base features="":
     just _build {{features}}
@@ -100,13 +103,29 @@ deploy-kindnet:
 deploy-calico:
     kubectl --context kind-dev apply -f testdata/helm.yaml
 
+deploy-calico-gitrepo: _download-yq
+    #!/usr/bin/env bash
+    set -euxo pipefail
+    repo=`git remote get-url origin`
+    branch=`git branch --show-current`
+    cp testdata/gitrepo-calico.yaml {{OUT_DIR}}/gitrepo-calico.yaml
+    yq -i ".spec.repo = \"${repo}\"" {{OUT_DIR}}/gitrepo-calico.yaml
+    yq -i ".spec.branch = \"${branch}\"" {{OUT_DIR}}/gitrepo-calico.yaml
+    kubectl apply -f {{OUT_DIR}}/gitrepo-calico.yaml
+
 # Deploy an example app bundle to the cluster
 deploy-app:
     kubectl --context kind-dev apply -f testdata/bundle.yaml
 
 # Deploy child cluster using docker & kubeadm
 deploy-child-cluster:
+    kind delete cluster --name docker-demo || true
     kubectl --context kind-dev apply -f testdata/cluster_docker_kcp.yaml
+
+# Deploy child cluster using docker & rke2
+deploy-child-rke2-cluster:
+    kind delete cluster --name docker-demo || true
+    kubectl --context kind-dev apply -f testdata/cluster_docker_rke2.yaml
 
 # Deploy child cluster-call based cluster using docker & kubeadm
 deploy-child-cluster-class:
@@ -115,11 +134,7 @@ deploy-child-cluster-class:
 
 # Add and update helm repos used
 update-helm-repos:
-    #helm repo add gitea-charts https://dl.gitea.com/charts/
     helm repo add fleet https://rancher.github.io/fleet-helm-charts/
-    #helm repo add jetstack https://charts.jetstack.io
-    #helm repo add traefik https://traefik.github.io/charts
-    #helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
     helm repo update
 
 # Install fleet into the k8s cluster
@@ -136,7 +151,7 @@ install-capi: _download-clusterctl
 # Deploy will deploy the operator
 deploy features="": _download-kustomize
     just generate {{features}}
-    just load-base {{features}}
+    just build-and-load
     kustomize build config/default | kubectl apply -f -
     kubectl --context kind-dev apply -f testdata/config.yaml
     kubectl wait fleetaddonconfigs fleet-addon-config --for=jsonpath='{.status.installedVersion}' --timeout=150s
@@ -149,6 +164,12 @@ release-manifests: _create-out-dir _download-kustomize
 
 # Full e2e test of importing cluster in fleet
 test-import: start-dev deploy deploy-child-cluster deploy-kindnet deploy-app && collect-test-import
+    kubectl wait pods --for=condition=Ready --timeout=150s --all --all-namespaces
+    kubectl wait cluster --timeout=500s --for=condition=ControlPlaneReady=true docker-demo
+    kubectl wait clusters.fleet.cattle.io --timeout=300s --for=condition=Ready=true docker-demo
+
+# Full e2e test of importing cluster in fleet
+test-import-rke2: start-dev deploy deploy-child-rke2-cluster deploy-calico-gitrepo deploy-app
     kubectl wait pods --for=condition=Ready --timeout=150s --all --all-namespaces
     kubectl wait cluster --timeout=500s --for=condition=ControlPlaneReady=true docker-demo
     kubectl wait clusters.fleet.cattle.io --timeout=300s --for=condition=Ready=true docker-demo

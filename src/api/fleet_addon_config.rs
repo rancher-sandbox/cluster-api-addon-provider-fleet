@@ -1,4 +1,4 @@
-use fleet_api_rs::fleet_cluster::ClusterAgentEnvVars;
+use fleet_api_rs::fleet_cluster::{ClusterAgentEnvVars, ClusterAgentTolerations};
 use k8s_openapi::{
     api::core::v1::ObjectReference, apimachinery::pkg::apis::meta::v1::LabelSelector,
 };
@@ -107,6 +107,10 @@ pub struct ClusterConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent_namespace: Option<String>,
 
+    /// Agent taint toleration settings for every cluster
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_tolerations: Option<Vec<ClusterAgentTolerations>>,
+
     /// Host network allows to deploy agent configuration using hostNetwork: true setting
     /// which eludes dependency on the CNI configuration for the cluster.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -132,6 +136,32 @@ impl ClusterConfig {
         self.agent_namespace
             .clone()
             .unwrap_or(AGENT_NAMESPACE.to_string())
+    }
+
+    pub(crate) fn agent_tolerations(&self) -> Vec<ClusterAgentTolerations> {
+        let agent_tolerations = vec![
+            ClusterAgentTolerations {
+                effect: Some("NoSchedule".into()),
+                operator: Some("Exists".into()),
+                key: Some("node.kubernetes.io/not-ready".into()),
+                ..Default::default()
+            },
+            ClusterAgentTolerations {
+                effect: Some("NoSchedule".into()),
+                operator: Some("Exists".into()),
+                key: Some("node.cluster.x-k8s.io/uninitialized".into()),
+                ..Default::default()
+            },
+            ClusterAgentTolerations {
+                effect: Some("NoSchedule".into()),
+                operator: Some("Equal".into()),
+                key: Some("node.cloudprovider.kubernetes.io/uninitialized".into()),
+                value: Some("true".into()),
+                ..Default::default()
+            },
+        ];
+
+        self.agent_tolerations.clone().unwrap_or(agent_tolerations)
     }
 
     #[cfg(feature = "agent-initiated")]
@@ -167,6 +197,7 @@ impl Default for ClusterConfig {
             selectors: Default::default(),
             patch_resource: Some(true),
             agent_env_vars: None,
+            agent_tolerations: None,
         }
     }
 }
@@ -233,11 +264,9 @@ impl NamingStrategy {
 #[serde(rename_all = "camelCase")]
 pub struct Selectors {
     /// Namespace label selector. If set, only clusters in the namespace matching label selector will be imported.
-    /// WARN: this field controls the state of opened watches to the cluster. If changed, requires controller to be reloaded.
     pub namespace_selector: LabelSelector,
 
     /// Cluster label selector. If set, only clusters matching label selector will be imported.
-    /// WARN: this field controls the state of opened watches to the cluster. If changed, requires controller to be reloaded.
     pub selector: LabelSelector,
 }
 

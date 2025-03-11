@@ -1,19 +1,24 @@
 use base64::prelude::*;
+use cluster_api_rs::capi_cluster::Cluster;
+use futures::StreamExt as _;
 use std::{fmt::Display, io, str::FromStr, sync::Arc, time::Duration};
 
-use k8s_openapi::api::core::v1::{ConfigMap, Endpoints};
+use k8s_openapi::api::core::v1::{self, ConfigMap, Endpoints};
 use kube::{
-    api::{ObjectMeta, Patch, PatchParams, TypeMeta},
+    api::{ApiResource, ObjectMeta, Patch, PatchParams, TypeMeta},
     client::scope::Namespace,
     core::object::HasSpec,
-    runtime::controller::Action,
+    runtime::{
+        controller::Action,
+        watcher::{self, Config},
+    },
     Api, Resource, ResourceExt,
 };
 use serde::{ser, Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::{serde_as, DisplayFromStr};
 use thiserror::Error;
-use tracing::instrument;
+use tracing::{info, instrument};
 
 use crate::{
     api::fleet_addon_config::{FleetAddonConfig, Install, InstallOptions, Server},
@@ -131,6 +136,52 @@ impl FleetAddonConfig {
             &Patch::Apply(&fleet_config),
         )
         .await?;
+
+        info!("Updated fleet config map");
+
+        Ok(Action::await_change())
+    }
+
+    #[instrument(skip_all, fields(trace_id = display(telemetry::get_trace_id()), name = self.name_any(), namespace = self.namespace()))]
+    pub async fn update_watches(self: Arc<Self>, ctx: Arc<Context>) -> DynamiWatcherResult<Action> {
+        info!("Reconciling dynamic watches");
+        let cluster_selector = self.cluster_watch()?;
+        let ns_selector = self.namespace_selector()?;
+
+        let mut stream = ctx.stream.stream.lock().await;
+        stream.clear();
+
+        stream.push(
+            watcher::watcher(
+                Api::all_with(ctx.client.clone(), &ApiResource::erase::<Cluster>(&())),
+                Config::default()
+                    .labels_from(&cluster_selector)
+                    .any_semantic(),
+            )
+            .boxed(),
+        );
+
+        stream.push(
+            watcher::watcher(
+                Api::all_with(
+                    ctx.client.clone(),
+                    &ApiResource::erase::<v1::Namespace>(&()),
+                ),
+                Config::default().labels_from(&ns_selector).any_semantic(),
+            )
+            .boxed(),
+        );
+
+        info!("Reconciled dynamic watches to match selectors: namespace={ns_selector}, cluster={cluster_selector}");
+        Ok(Action::await_change())
+    }
+
+    #[instrument(skip_all, fields(trace_id = display(telemetry::get_trace_id()), name = self.name_any(), namespace = self.namespace()))]
+    pub async fn reconcile_dynamic_watches(
+        self: Arc<Self>,
+        ctx: Arc<Context>,
+    ) -> crate::Result<Action> {
+        self.update_watches(ctx).await?;
 
         Ok(Action::await_change())
     }
@@ -312,6 +363,14 @@ pub enum AddonConfigSyncError {
 
     #[error("Error waiting for command: {0}")]
     CommandError(#[from] io::Error),
+}
+
+pub type DynamiWatcherResult<T> = std::result::Result<T, DynamicWatcherError>;
+
+#[derive(Error, Debug)]
+pub enum DynamicWatcherError {
+    #[error("Invalid selector encountered: {0}")]
+    SelectorParseError(#[from] kube::core::ParseExpressionError),
 }
 
 mod tests {

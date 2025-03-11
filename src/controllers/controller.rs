@@ -1,21 +1,25 @@
 use crate::api::fleet_addon_config::FleetAddonConfig;
 use crate::controllers::PatchError;
 use crate::metrics::Diagnostics;
+use crate::multi_dispatcher::{BroadcastStream, MultiDispatcher};
 use crate::{telemetry, Error, Metrics};
 use chrono::Utc;
 
+use futures::stream::SelectAll;
+use futures::Stream;
 use k8s_openapi::NamespaceResourceScope;
 
-use kube::api::{Patch, PatchParams, PostParams};
+use kube::api::{DynamicObject, Patch, PatchParams, PostParams};
 
 use kube::runtime::events::{Event, EventType};
-use kube::runtime::finalizer;
+use kube::runtime::{finalizer, watcher};
 
 use kube::{api::Api, client::Client, runtime::controller::Action};
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
+use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{self, debug, info, instrument};
@@ -26,6 +30,10 @@ use super::{
 
 pub static FLEET_FINALIZER: &str = "fleet.addons.cluster.x-k8s.io";
 
+type DynamicStream = SelectAll<
+    Pin<Box<dyn Stream<Item = Result<watcher::Event<DynamicObject>, watcher::Error>> + Send>>,
+>;
+
 // Context for the reconciler
 #[derive(Clone)]
 pub struct Context {
@@ -35,6 +43,10 @@ pub struct Context {
     pub diagnostics: Arc<RwLock<Diagnostics>>,
     /// Prom metrics
     pub metrics: Metrics,
+    // Dispatcher for dynamic resource controllers
+    pub dispatcher: MultiDispatcher,
+    // shared stream of dynamic events
+    pub stream: BroadcastStream<DynamicStream>,
 }
 
 pub(crate) async fn get_or_create<R>(ctx: Arc<Context>, res: R) -> GetOrCreateResult<Action>

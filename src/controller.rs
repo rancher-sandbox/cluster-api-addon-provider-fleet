@@ -6,13 +6,16 @@ use crate::api::fleet_clustergroup::ClusterGroup;
 use crate::controllers::addon_config::FleetConfig;
 use crate::controllers::controller::{fetch_config, Context, FleetController};
 use crate::metrics::Diagnostics;
+use crate::multi_dispatcher::{broadcaster, BroadcastStream, MultiDispatcher};
 use crate::{Error, Metrics};
 
 use clap::Parser;
 use futures::channel::mpsc;
-use futures::StreamExt;
+use futures::stream::SelectAll;
+use futures::{Stream, StreamExt};
 
 use k8s_openapi::api::core::v1::Namespace;
+use kube::api::{DynamicObject, ListParams};
 use kube::core::DeserializeGuard;
 use kube::runtime::reflector::ObjectRef;
 use kube::runtime::{metadata_watcher, predicates, reflector, watcher, WatchStreamExt};
@@ -26,16 +29,22 @@ use kube::{
     },
 };
 use tokio::sync::Mutex;
+use tokio::time::sleep;
 
 use std::future;
 
 use std::ops::Deref;
+use std::pin::Pin;
 use std::sync::Arc;
 use tokio::{sync::RwLock, time::Duration};
-use tracing::{self, warn};
+use tracing::{self, info, warn};
+
+type DynamicStream = SelectAll<
+    Pin<Box<dyn Stream<Item = Result<watcher::Event<DynamicObject>, watcher::Error>> + Send>>,
+>;
 
 /// State shared between the controller and the web server
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct State {
     /// Diagnostics populated by the reconciler
     diagnostics: Arc<RwLock<Diagnostics>>,
@@ -45,6 +54,11 @@ pub struct State {
 
     /// Additional flags for controller
     pub flags: Flags,
+
+    // dispatcher
+    dispatcher: MultiDispatcher,
+    // shared stream of dynamic events
+    stream: BroadcastStream<DynamicStream>,
 }
 
 #[derive(Parser, Debug, Clone, Default)]
@@ -55,6 +69,12 @@ pub struct Flags {
 }
 
 /// State wrapper around the controller outputs for the web server
+impl Default for State {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl State {
     pub fn new() -> Self {
         let registry = Default::default();
@@ -62,7 +82,9 @@ impl State {
             metrics: Metrics::default().register(&registry).unwrap(),
             registry,
             flags: Flags::parse(),
-            ..Default::default()
+            dispatcher: MultiDispatcher::new(128),
+            diagnostics: Default::default(),
+            stream: BroadcastStream::new(Default::default()),
         }
     }
 
@@ -82,6 +104,8 @@ impl State {
             client,
             metrics: self.metrics.clone(),
             diagnostics: self.diagnostics.clone(),
+            dispatcher: self.dispatcher.clone(),
+            stream: self.stream.clone(),
         })
     }
 }
@@ -90,20 +114,53 @@ pub async fn run_fleet_addon_config_controller(state: State) {
     let client = Client::try_default()
         .await
         .expect("failed to create kube Client");
-    let api: Api<FleetAddonConfig> = Api::all(client.clone());
-    let fleet_addon_config_controller = Controller::new(api, watcher::Config::default())
-        .watches(
-            Api::<DeserializeGuard<FleetConfig>>::all(client.clone()),
-            Config::default().fields("metadata.name=fleet-controller"),
-            |config| config.0.ok().map(|_| ObjectRef::new("fleet-addon-config")),
-        )
-        .run(
-            FleetAddonConfig::reconcile_config_sync,
-            error_policy,
-            state.to_context(client.clone()),
-        )
+
+    let config_controller = Controller::new(
+        Api::<FleetAddonConfig>::all(client.clone()),
+        Config::default().any_semantic(),
+    )
+    .watches(
+        Api::<DeserializeGuard<FleetConfig>>::all(client.clone()),
+        Config::default().fields("metadata.name=fleet-controller"),
+        |config| config.0.ok().map(|_| ObjectRef::new("fleet-addon-config")),
+    )
+    .shutdown_on_signal()
+    .run(
+        FleetAddonConfig::reconcile_config_sync,
+        error_policy,
+        state.to_context(client.clone()),
+    )
+    .for_each(|_| futures::future::ready(()));
+
+    let dynamic_watches_controller = Controller::new(
+        Api::<FleetAddonConfig>::all(client.clone()),
+        Config::default().any_semantic(),
+    )
+    .shutdown_on_signal()
+    .run(
+        FleetAddonConfig::reconcile_dynamic_watches,
+        error_policy,
+        state.to_context(client.clone()),
+    )
+    .for_each(|_| futures::future::ready(()));
+
+    let watcher = broadcaster(state.dispatcher.clone(), state.stream.clone())
         .for_each(|_| futures::future::ready(()));
-    tokio::join!(fleet_addon_config_controller);
+
+    // Reconcile initial state of watches
+    Arc::new(
+        fetch_config(client.clone())
+            .await
+            .expect("failed to get FleetAddonConfig resource"),
+    )
+    .update_watches(state.to_context(client.clone()))
+    .await
+    .expect("Initial dynamic watches setup to succeed");
+
+    tokio::select! {
+        _ = watcher => {panic!("This should not happen before controllers exit")},
+        _ = futures::future::join(dynamic_watches_controller, config_controller) => {}
+    };
 }
 
 pub async fn run_fleet_helm_controller(state: State) {
@@ -112,6 +169,7 @@ pub async fn run_fleet_helm_controller(state: State) {
         .expect("failed to create kube Client");
     let api: Api<FleetAddonConfig> = Api::all(client.clone());
     let fleet_addon_config_controller = Controller::new(api, watcher::Config::default())
+        .shutdown_on_signal()
         .run(
             FleetAddonConfig::reconcile_helm,
             error_policy,
@@ -127,28 +185,20 @@ pub async fn run_cluster_controller(state: State) {
         .await
         .expect("failed to create kube Client");
 
+    loop {
+        let clusters = Api::<fleet_cluster::Cluster>::all(client.clone());
+        if let Err(e) = clusters.list(&ListParams::default().limit(1)).await {
+            info!("Fleet Clusters are not queryable; {e:?}. Is the CRD installed?");
+            sleep(Duration::new(5, 0)).await;
+            continue;
+        }
+
+        break;
+    }
+
     let config = fetch_config(client.clone())
         .await
         .expect("failed to get FleetAddonConfig resource");
-
-    let (reader, writer) = reflector::store();
-    let clusters = watcher(
-        Api::<Cluster>::all(client.clone()),
-        Config::default()
-            .labels_from(
-                &config
-                    .cluster_watch()
-                    .expect("valid cluster label selector"),
-            )
-            .any_semantic(),
-    )
-    .default_backoff()
-    .modify(|c| {
-        c.managed_fields_mut().clear();
-    })
-    .reflect(writer)
-    .touched_objects()
-    .predicate_filter(predicates::resource_version);
 
     let fleet = metadata_watcher(
         Api::<fleet_cluster::Cluster>::all(client.clone()),
@@ -159,7 +209,8 @@ pub async fn run_cluster_controller(state: State) {
     .predicate_filter(predicates::resource_version);
 
     let (invoke_reconcile, namespace_trigger) = mpsc::channel(0);
-    let clusters = Controller::for_stream(clusters, reader)
+    let (sub, reader) = state.dispatcher.subscribe();
+    let clusters = Controller::for_shared_stream(sub, reader)
         .owns_stream(fleet)
         .reconcile_all_on(namespace_trigger)
         .shutdown_on_signal()
@@ -178,28 +229,8 @@ pub async fn run_cluster_controller(state: State) {
         return clusters.await;
     }
 
-    let (reader, writer) = reflector::store();
-    let namespaces = metadata_watcher(
-        Api::<Namespace>::all(client.clone()),
-        Config::default()
-            .labels_from(
-                &config
-                    .namespace_selector()
-                    .expect("valid namespace selector"),
-            )
-            .any_semantic(),
-    )
-    .default_backoff()
-    .modify(|ns| {
-        ns.managed_fields_mut().clear();
-        ns.annotations_mut().clear();
-        ns.labels_mut().clear();
-    })
-    .reflect(writer)
-    .touched_objects()
-    .predicate_filter(predicates::resource_version);
-
-    let ns_controller = Controller::for_stream(namespaces, reader)
+    let (sub, reader) = state.dispatcher.subscribe::<Namespace>();
+    let ns_controller = Controller::for_shared_stream(sub, reader)
         .shutdown_on_signal()
         .run(
             Cluster::reconcile_ns,

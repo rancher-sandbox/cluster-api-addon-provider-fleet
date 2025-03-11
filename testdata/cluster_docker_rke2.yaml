@@ -1,3 +1,121 @@
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: DockerCluster
+metadata:
+  name: docker-demo
+spec:
+  loadBalancer:
+    customHAProxyConfigTemplateRef:
+      name: docker-demo-lb-config
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: docker-demo
+  labels:
+    cni: calico
+    import: ""
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks:
+      - 10.1.0.0/16
+    services:
+      cidrBlocks:
+      - 10.10.0.0/16
+    serviceDomain: cluster.local
+  controlPlaneRef:
+    apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+    kind: RKE2ControlPlane
+    name: docker-demo-control-plane
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+    kind: DockerCluster
+    name: docker-demo
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: DockerMachineTemplate
+metadata:
+  name:  docker-demo-control-plane
+spec:
+  template:
+    spec:
+      customImage: kindest/node:v1.31.0
+      bootstrapTimeout: 15m
+---
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+kind: RKE2ControlPlane
+metadata:
+  name: docker-demo-control-plane
+spec:
+  replicas: 1
+  version: v1.31.0+rke2r1
+  rolloutStrategy:
+    rollingUpdate:
+      maxSurge: 1
+    type: RollingUpdate
+  serverConfig:
+    cloudProviderName: external
+    cni: none
+    kubeAPIServer:
+      extraArgs:
+      - --anonymous-auth=true
+    disableComponents:
+      pluginComponents:
+       - rke2-ingress-nginx
+      kubernetesComponents:
+      - cloudController
+  machineTemplate:
+    infrastructureRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+      kind: DockerMachineTemplate
+      name:  docker-demo-control-plane
+    nodeDrainTimeout: 30s
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+    kind: DockerMachineTemplate
+    name:  docker-demo-control-plane
+  nodeDrainTimeout: 30s
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: DockerMachineTemplate
+metadata:
+  name: docker-demo-md-0
+spec:
+  template:
+    spec:
+      customImage: kindest/node:v1.31.0
+      bootstrapTimeout: 15m
+---
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+kind: RKE2ConfigTemplate
+metadata:
+  name: docker-demo-md-0
+spec: {}
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineDeployment
+metadata:
+  name: docker-demo-md-0
+spec:
+  clusterName: docker-demo
+  replicas: 1
+  selector:
+    matchLabels:
+      cluster.x-k8s.io/cluster-name: docker-demo
+  template:
+    spec:
+      version: v1.31.0+rke2r1
+      clusterName: docker-demo
+      bootstrap:
+        configRef:
+          apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+          kind: RKE2ConfigTemplate
+          name: docker-demo-md-0
+      infrastructureRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+        kind: DockerMachineTemplate
+        name: docker-demo-md-0
+---
 apiVersion: v1
 data:
   value: |-
@@ -25,10 +143,12 @@ data:
       default-server init-addr none
 
     frontend stats
+      mode http
       bind *:8404
       stats enable
-      stats uri /
-      stats refresh 10s
+      stats uri /stats
+      stats refresh 1s
+      stats admin if TRUE
 
     frontend control-plane
       bind *:{{ .FrontendControlPlanePort }}
@@ -39,10 +159,9 @@ data:
 
     backend kube-apiservers
       option httpchk GET /healthz
-      http-check expect status 401
-      # TODO: we should be verifying (!)
-      {{range $server, $address := .BackendServers}}
-      server {{ $server }} {{ JoinHostPort $address $.BackendControlPlanePort }} check check-ssl verify none resolvers docker resolve-prefer {{ if $.IPv6 -}} ipv6 {{- else -}} ipv4 {{- end }}
+
+      {{range $server, $backend := .BackendServers }}
+      server {{ $server }} {{ JoinHostPort $backend.Address $.BackendControlPlanePort }} check check-ssl verify none resolvers docker resolve-prefer {{ if $.IPv6 -}} ipv6 {{- else -}} ipv4 {{- end }}
       {{- end}}
 
     frontend rke2-join
@@ -55,120 +174,11 @@ data:
     backend rke2-servers
       option httpchk GET /v1-rke2/readyz
       http-check expect status 403
-      {{range $server, $address := .BackendServers}}
-      server {{ $server }} {{ $address }}:9345 check check-ssl verify none
+      {{range $server, $backend := .BackendServers }}
+      server {{ $server }} {{ $backend.Address }}:9345 check check-ssl verify none
       {{- end}}
 kind: ConfigMap
 metadata:
-  name: test-lb-config
-  namespace: default
----
-apiVersion: cluster.x-k8s.io/v1beta1
-kind: Cluster
-metadata:
-  name: test1
-  namespace: default
-spec:
-  clusterNetwork:
-    pods:
-      cidrBlocks:
-      - 10.45.0.0/16
-    serviceDomain: cluster.local
-    services:
-      cidrBlocks:
-      - 10.46.0.0/16
-  controlPlaneRef:
-    apiVersion: controlplane.cluster.x-k8s.io/v1alpha1
-    kind: RKE2ControlPlane
-    name: test1-control-plane
-  infrastructureRef:
-    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-    kind: DockerCluster
-    name: test1
----
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-kind: DockerCluster
-metadata:
-  name: test1
-  namespace: default
-spec:
-  loadBalancer:
-    customHAProxyConfigTemplateRef:
-      name: test-lb-config
----
-apiVersion: controlplane.cluster.x-k8s.io/v1alpha1
-kind: RKE2ControlPlane
-metadata:
-  name: test1-control-plane
-  namespace: default
-spec:
-  agentConfig:
-    version: v1.31.0+rke2r1
-  # nodeAnnotations:
-  #   richtest: "true"
-  infrastructureRef:
-    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-    kind: DockerMachineTemplate
-    name: controlplane
-  nodeDrainTimeout: 2m
-  replicas: 1
-  serverConfig:
-    cni: calico
----
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-kind: DockerMachineTemplate
-metadata:
-  name: controlplane
-  namespace: default
-spec:
-  template:
-    spec: {}
----
-apiVersion: cluster.x-k8s.io/v1beta1
-kind: MachineDeployment
-metadata:
-  name: worker-md-0
-  namespace: default
-spec:
-  clusterName: test1
-  replicas: 1
-  selector:
-    matchLabels:
-      cluster.x-k8s.io/cluster-name: test1
-  template:
-    spec:
-      bootstrap:
-        configRef:
-          apiVersion: bootstrap.cluster.x-k8s.io/v1alpha1
-          kind: RKE2ConfigTemplate
-          name: test1-agent
-      clusterName: test1
-      infrastructureRef:
-        apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-        kind: DockerMachineTemplate
-        name: worker
-      version: v1.31.0
----
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-kind: DockerMachineTemplate
-metadata:
-  name: worker
-  namespace: default
-spec:
-  template:
-    spec: {}
----
-apiVersion: bootstrap.cluster.x-k8s.io/v1alpha1
-kind: RKE2ConfigTemplate
-metadata:
-  name: test1-agent
-  namespace: default
-spec:
-  template:
-    spec:
-      agentConfig:
-        version: v1.31.0+rke2r1
-      #nodeAnnotations:
-      #  richtest: "true"
-      # postRKE2Commands:
-      # - kubectl --kubeconfig /var/lib/rancher/rke2/agent/kubelet.kubeconfig annotate node $(hostname) richtest=true
+  name: docker-demo-lb-config
+  annotations:
+    "helm.sh/resource-policy": keep

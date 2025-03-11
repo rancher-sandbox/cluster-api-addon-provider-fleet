@@ -1,4 +1,7 @@
-use controllers::{addon_config::AddonConfigSyncError, BundleError, SyncError};
+use controllers::{
+    addon_config::{AddonConfigSyncError, DynamicWatcherError},
+    BundleError, SyncError,
+};
 use futures::channel::mpsc::TrySendError;
 use thiserror::Error;
 
@@ -18,6 +21,9 @@ pub enum Error {
 
     #[error("Fleet config error: {0}")]
     FleetConfigError(#[from] AddonConfigSyncError),
+
+    #[error("Dynamic watcher error: {0}")]
+    DynamicWatcherError(#[from] DynamicWatcherError),
 
     #[error("Namespace trigger error: {0}")]
     TriggerError(#[from] TrySendError<()>),
@@ -44,6 +50,7 @@ pub mod controller;
 pub use crate::controller::*;
 pub mod api;
 pub mod controllers;
+mod multi_dispatcher;
 pub mod predicates;
 
 /// Log and trace integrations

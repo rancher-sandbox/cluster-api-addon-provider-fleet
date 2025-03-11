@@ -8,7 +8,7 @@ use crate::api::fleet_cluster_registration_token::ClusterRegistrationToken;
 use crate::api::fleet_clustergroup::ClusterGroup;
 use crate::Error;
 use cluster_api_rs::capi_cluster::ClusterTopology;
-use fleet_api_rs::fleet_cluster::{ClusterAgentTolerations, ClusterSpec};
+use fleet_api_rs::fleet_cluster::ClusterSpec;
 use fleet_api_rs::fleet_clustergroup::{ClusterGroupSelector, ClusterGroupSpec};
 use futures::channel::mpsc::Sender;
 use k8s_openapi::api::core::v1::Namespace;
@@ -184,22 +184,6 @@ impl Cluster {
             None | Some(ClusterTopology { .. }) => self.labels().clone(),
         };
 
-        let agent_tolerations = Some(vec![
-            ClusterAgentTolerations {
-                effect: Some("NoSchedule".into()),
-                operator: Some("Equal".into()),
-                key: Some("node.kubernetes.io/not-ready".into()),
-                ..Default::default()
-            },
-            ClusterAgentTolerations {
-                effect: Some("NoSchedule".into()),
-                operator: Some("Equal".into()),
-                key: Some("node.cloudprovider.kubernetes.io/uninitialized".into()),
-                value: Some("true".into()),
-                ..Default::default()
-            },
-        ]);
-
         fleet_cluster::Cluster {
             types: Some(TypeMeta::resource::<fleet_cluster::Cluster>()),
             metadata: ObjectMeta {
@@ -216,18 +200,18 @@ impl Cluster {
                 true => ClusterSpec {
                     client_id: Some(Alphanumeric.sample_string(&mut rand::rng(), 64)),
                     agent_namespace: config.agent_install_namespace().into(),
+                    agent_tolerations: config.agent_tolerations().into(),
                     host_network: config.host_network,
                     agent_env_vars: config.agent_env_vars,
-                    agent_tolerations,
                     ..Default::default()
                 }
                 .into(),
                 false => ClusterSpec {
                     kube_config_secret: Some(format!("{}-kubeconfig", self.name_any())),
                     agent_namespace: config.agent_install_namespace().into(),
+                    agent_tolerations: config.agent_tolerations().into(),
                     host_network: config.host_network,
                     agent_env_vars: config.agent_env_vars,
-                    agent_tolerations,
                     ..Default::default()
                 }
                 .into(),
@@ -236,9 +220,9 @@ impl Cluster {
             spec: ClusterSpec {
                 kube_config_secret: Some(format!("{}-kubeconfig", self.name_any())),
                 agent_namespace: config.agent_install_namespace().into(),
+                agent_tolerations: config.agent_tolerations().into(),
                 host_network: config.host_network,
                 agent_env_vars: config.agent_env_vars,
-                agent_tolerations,
                 ..Default::default()
             },
             ..Default::default()
