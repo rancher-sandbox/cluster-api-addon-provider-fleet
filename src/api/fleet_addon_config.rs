@@ -271,16 +271,6 @@ pub struct Selectors {
 }
 
 impl FleetAddonConfig {
-    // Raw cluster selector
-    pub(crate) fn cluster_selector(&self) -> Result<Selector, ParseExpressionError> {
-        self.spec
-            .cluster
-            .as_ref()
-            .map(|c| c.selectors.selector.clone())
-            .unwrap_or_default()
-            .try_into()
-    }
-
     // Provide a static label selector for cluster objects, which can be always be set
     // and will not cause cache events from resources in the labeled Namespace to be missed
     pub(crate) fn cluster_watch(&self) -> Result<Selector, ParseExpressionError> {
@@ -289,6 +279,16 @@ impl FleetAddonConfig {
             .selects_all()
             .then_some(self.cluster_selector()?)
             .unwrap_or_default())
+    }
+
+    // Raw cluster selector
+    pub(crate) fn cluster_selector(&self) -> Result<Selector, ParseExpressionError> {
+        self.spec
+            .cluster
+            .as_ref()
+            .map(|c| c.selectors.selector.clone())
+            .unwrap_or_default()
+            .try_into()
     }
 
     // Raw namespace selector

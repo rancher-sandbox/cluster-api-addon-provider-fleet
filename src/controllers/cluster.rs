@@ -11,10 +11,12 @@ use cluster_api_rs::capi_cluster::ClusterTopology;
 use fleet_api_rs::fleet_cluster::ClusterSpec;
 use fleet_api_rs::fleet_clustergroup::{ClusterGroupSelector, ClusterGroupSpec};
 use futures::channel::mpsc::Sender;
+use futures::StreamExt as _;
 use k8s_openapi::api::core::v1::Namespace;
-use kube::api::{Object, ObjectMeta, PatchParams, TypeMeta};
+use kube::api::{ApiResource, Object, ObjectMeta, PatchParams, TypeMeta};
 
 use kube::core::SelectorExt as _;
+use kube::runtime::watcher::{self, Config};
 use kube::{api::ResourceExt, runtime::controller::Action, Resource};
 use kube::{Api, Client};
 #[cfg(feature = "agent-initiated")]
@@ -22,7 +24,7 @@ use rand::distr::{Alphanumeric, SampleString as _};
 use serde::Serialize;
 use serde_json::Value;
 use tokio::sync::Mutex;
-use tracing::warn;
+use tracing::{info, warn};
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -299,8 +301,12 @@ impl FleetController for Cluster {
 
     async fn to_bundle(&self, ctx: Arc<Context>) -> BundleResult<Option<FleetClusterBundle>> {
         let config = fetch_config(ctx.clone().client.clone()).await?;
-        let matching_labels = self.matching_labels(&config, ctx.client.clone()).await?;
-        if !matching_labels || !config.cluster_operations_enabled() {
+
+        if ctx.version < 32 && !self.matching_labels(&config, ctx.client.clone()).await? {
+            return Ok(None);
+        }
+
+        if !config.cluster_operations_enabled() {
             return Ok(None);
         }
 
@@ -329,6 +335,28 @@ impl Cluster {
         });
 
         ready_condition.or(cp_ready).map(|_| self)
+    }
+
+    pub async fn add_namespace_dynamic_watch(
+        ns: Arc<Namespace>,
+        ctx: Arc<Context>,
+    ) -> crate::Result<Action> {
+        ctx.stream.stream.lock().await.push(
+            watcher::watcher(
+                Api::namespaced_with(
+                    ctx.client.clone(),
+                    &ns.name_any(),
+                    &ApiResource::erase::<Cluster>(&()),
+                ),
+                Config::default().streaming_lists(),
+            )
+            .boxed(),
+        );
+
+        let name = ns.name_any();
+        info!("Reconciled dynamic watches: added namespace watch on {name}");
+
+        Ok(Action::await_change())
     }
 
     pub async fn matching_labels(

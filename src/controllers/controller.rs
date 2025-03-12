@@ -47,6 +47,8 @@ pub struct Context {
     pub dispatcher: MultiDispatcher,
     // shared stream of dynamic events
     pub stream: BroadcastStream<DynamicStream>,
+    // k8s minor version
+    pub version: u32,
 }
 
 pub(crate) async fn get_or_create<R>(ctx: Arc<Context>, res: R) -> GetOrCreateResult<Action>
