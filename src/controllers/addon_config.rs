@@ -143,20 +143,30 @@ impl FleetAddonConfig {
     }
 
     #[instrument(skip_all, fields(trace_id = display(telemetry::get_trace_id()), name = self.name_any(), namespace = self.namespace()))]
-    pub async fn update_watches(self: Arc<Self>, ctx: Arc<Context>) -> DynamiWatcherResult<Action> {
+    pub async fn update_watches(
+        self: Arc<Self>,
+        ctx: Arc<Context>,
+    ) -> DynamicWatcherResult<Action> {
         info!("Reconciling dynamic watches");
-        let cluster_selector = self.cluster_watch()?;
+        let cluster_selector = self.cluster_selector()?;
         let ns_selector = self.namespace_selector()?;
+        let mut ns_config = Config::default().labels_from(&ns_selector);
+        let mut cluster_config = Config::default().labels_from(&cluster_selector);
 
         let mut stream = ctx.stream.stream.lock().await;
         stream.clear();
 
+        if ctx.version >= 32 {
+            ns_config = ns_config.streaming_lists();
+            cluster_config = Config::default()
+                .labels_from(&self.cluster_watch()?)
+                .streaming_lists();
+        }
+
         stream.push(
             watcher::watcher(
                 Api::all_with(ctx.client.clone(), &ApiResource::erase::<Cluster>(&())),
-                Config::default()
-                    .labels_from(&cluster_selector)
-                    .any_semantic(),
+                cluster_config,
             )
             .boxed(),
         );
@@ -167,7 +177,7 @@ impl FleetAddonConfig {
                     ctx.client.clone(),
                     &ApiResource::erase::<v1::Namespace>(&()),
                 ),
-                Config::default().labels_from(&ns_selector).any_semantic(),
+                ns_config,
             )
             .boxed(),
         );
@@ -365,7 +375,7 @@ pub enum AddonConfigSyncError {
     CommandError(#[from] io::Error),
 }
 
-pub type DynamiWatcherResult<T> = std::result::Result<T, DynamicWatcherError>;
+pub type DynamicWatcherResult<T> = std::result::Result<T, DynamicWatcherError>;
 
 #[derive(Error, Debug)]
 pub enum DynamicWatcherError {

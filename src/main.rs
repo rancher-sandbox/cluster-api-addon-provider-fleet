@@ -2,6 +2,8 @@ use actix_web::{
     get, middleware, web::Data, App, HttpRequest, HttpResponse, HttpServer, Responder,
 };
 pub use controller::{self, telemetry, State};
+use futures::FutureExt;
+use kube::Client;
 use prometheus::{Encoder, TextEncoder};
 
 #[get("/metrics")]
@@ -28,8 +30,20 @@ async fn index(c: Data<State>, _req: HttpRequest) -> impl Responder {
 async fn main() -> anyhow::Result<()> {
     telemetry::init().await;
 
+    let client = Client::try_default()
+        .await
+        .expect("failed to create kube Client");
+
     // Init k8s controller state
-    let state = State::new();
+    let state = State::new(
+        client
+            .apiserver_version()
+            .await
+            .expect("fetch k8s api server version")
+            .minor
+            .parse()
+            .expect("version parse successfully"),
+    );
 
     match state.flags.helm_install {
         true => {
@@ -37,9 +51,16 @@ async fn main() -> anyhow::Result<()> {
             tokio::join!(helm_install_controller);
         }
         false => {
-            let fleet_config_controller =
-                controller::run_fleet_addon_config_controller(state.clone());
-            let cluster_controller = controller::run_cluster_controller(state.clone());
+            let fleet_config_controller = if state.version >= 32 {
+                controller::run_fleet_addon_config_controller(state.clone()).boxed()
+            } else {
+                controller::run_fleet_addon_config_controller_pre_1_32(state.clone()).boxed()
+            };
+            let cluster_controller = if state.version >= 32 {
+                controller::run_cluster_controller(state.clone()).boxed()
+            } else {
+                controller::run_cluster_controller_pre_1_32(state.clone()).boxed()
+            };
             let cluster_class_controller = controller::run_cluster_class_controller(state.clone());
 
             // Start web server

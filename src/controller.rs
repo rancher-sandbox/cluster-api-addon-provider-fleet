@@ -19,7 +19,7 @@ use kube::api::{DynamicObject, ListParams};
 use kube::core::DeserializeGuard;
 use kube::runtime::reflector::ObjectRef;
 use kube::runtime::{metadata_watcher, predicates, reflector, watcher, WatchStreamExt};
-use kube::ResourceExt as _;
+use kube::ResourceExt;
 use kube::{
     api::Api,
     client::Client,
@@ -59,6 +59,9 @@ pub struct State {
     dispatcher: MultiDispatcher,
     // shared stream of dynamic events
     stream: BroadcastStream<DynamicStream>,
+
+    // k8s api server minor version
+    pub version: u32,
 }
 
 #[derive(Parser, Debug, Clone, Default)]
@@ -68,15 +71,8 @@ pub struct Flags {
     pub helm_install: bool,
 }
 
-/// State wrapper around the controller outputs for the web server
-impl Default for State {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl State {
-    pub fn new() -> Self {
+    pub fn new(version: u32) -> Self {
         let registry = Default::default();
         Self {
             metrics: Metrics::default().register(&registry).unwrap(),
@@ -85,6 +81,7 @@ impl State {
             dispatcher: MultiDispatcher::new(128),
             diagnostics: Default::default(),
             stream: BroadcastStream::new(Default::default()),
+            version,
         }
     }
 
@@ -106,6 +103,7 @@ impl State {
             diagnostics: self.diagnostics.clone(),
             dispatcher: self.dispatcher.clone(),
             stream: self.stream.clone(),
+            version: self.version,
         })
     }
 }
@@ -163,6 +161,26 @@ pub async fn run_fleet_addon_config_controller(state: State) {
     };
 }
 
+pub async fn run_fleet_addon_config_controller_pre_1_32(state: State) {
+    let client = Client::try_default()
+        .await
+        .expect("failed to create kube Client");
+    let api: Api<FleetAddonConfig> = Api::all(client.clone());
+    let fleet_addon_config_controller = Controller::new(api, watcher::Config::default())
+        .watches(
+            Api::<DeserializeGuard<FleetConfig>>::all(client.clone()),
+            Config::default().fields("metadata.name=fleet-controller"),
+            |config| config.0.ok().map(|_| ObjectRef::new("fleet-addon-config")),
+        )
+        .run(
+            FleetAddonConfig::reconcile_config_sync,
+            error_policy,
+            state.to_context(client.clone()),
+        )
+        .for_each(|_| futures::future::ready(()));
+    tokio::join!(fleet_addon_config_controller);
+}
+
 pub async fn run_fleet_helm_controller(state: State) {
     let client = Client::try_default()
         .await
@@ -185,20 +203,70 @@ pub async fn run_cluster_controller(state: State) {
         .await
         .expect("failed to create kube Client");
 
-    loop {
-        let clusters = Api::<fleet_cluster::Cluster>::all(client.clone());
-        if let Err(e) = clusters.list(&ListParams::default().limit(1)).await {
-            info!("Fleet Clusters are not queryable; {e:?}. Is the CRD installed?");
-            sleep(Duration::new(5, 0)).await;
-            continue;
-        }
+    let (sub, reader) = state.dispatcher.subscribe();
+    let sub = sub
+        .map(|n: Arc<Namespace>| Ok(n.deref().clone()))
+        .predicate_filter(predicates::labels)
+        .filter_map(|n| future::ready(n.ok().map(Arc::new)));
+    let ns_controller = Controller::for_shared_stream(sub, reader)
+        .shutdown_on_signal()
+        .run(
+            Cluster::add_namespace_dynamic_watch,
+            error_policy,
+            state.to_context(client.clone()),
+        )
+        .for_each(|_| futures::future::ready(()));
 
-        break;
-    }
+    let (sub, reader) = state.dispatcher.subscribe();
+    let fleet = metadata_watcher(
+        Api::<fleet_cluster::Cluster>::all(client.clone()),
+        Config::default().any_semantic(),
+    )
+    .modify(|g| g.managed_fields_mut().clear())
+    .touched_objects()
+    .predicate_filter(predicates::resource_version);
+
+    let clusters = Controller::for_shared_stream(sub, reader)
+        .owns_stream(fleet)
+        .shutdown_on_signal()
+        .run(
+            Cluster::reconcile,
+            error_policy,
+            state.to_context(client.clone()),
+        )
+        .for_each(|_| futures::future::ready(()));
+
+    tokio::join!(clusters, ns_controller);
+}
+
+/// Initialize the controller and shared state (given the crd is installed)
+pub async fn run_cluster_controller_pre_1_32(state: State) {
+    let client = Client::try_default()
+        .await
+        .expect("failed to create kube Client");
 
     let config = fetch_config(client.clone())
         .await
         .expect("failed to get FleetAddonConfig resource");
+
+    let (reader, writer) = reflector::store();
+    let clusters = watcher(
+        Api::<Cluster>::all(client.clone()),
+        Config::default()
+            .labels_from(
+                &config
+                    .cluster_watch()
+                    .expect("valid cluster label selector"),
+            )
+            .any_semantic(),
+    )
+    .default_backoff()
+    .modify(|c| {
+        c.managed_fields_mut().clear();
+    })
+    .reflect(writer)
+    .touched_objects()
+    .predicate_filter(predicates::resource_version);
 
     let fleet = metadata_watcher(
         Api::<fleet_cluster::Cluster>::all(client.clone()),
@@ -209,8 +277,7 @@ pub async fn run_cluster_controller(state: State) {
     .predicate_filter(predicates::resource_version);
 
     let (invoke_reconcile, namespace_trigger) = mpsc::channel(0);
-    let (sub, reader) = state.dispatcher.subscribe();
-    let clusters = Controller::for_shared_stream(sub, reader)
+    let clusters = Controller::for_stream(clusters, reader)
         .owns_stream(fleet)
         .reconcile_all_on(namespace_trigger)
         .shutdown_on_signal()
@@ -229,8 +296,28 @@ pub async fn run_cluster_controller(state: State) {
         return clusters.await;
     }
 
-    let (sub, reader) = state.dispatcher.subscribe::<Namespace>();
-    let ns_controller = Controller::for_shared_stream(sub, reader)
+    let (reader, writer) = reflector::store();
+    let namespaces = metadata_watcher(
+        Api::<Namespace>::all(client.clone()),
+        Config::default()
+            .labels_from(
+                &config
+                    .namespace_selector()
+                    .expect("valid namespace selector"),
+            )
+            .any_semantic(),
+    )
+    .default_backoff()
+    .modify(|ns| {
+        ns.managed_fields_mut().clear();
+        ns.annotations_mut().clear();
+        ns.labels_mut().clear();
+    })
+    .reflect(writer)
+    .touched_objects()
+    .predicate_filter(predicates::resource_version);
+
+    let ns_controller = Controller::for_stream(namespaces, reader)
         .shutdown_on_signal()
         .run(
             Cluster::reconcile_ns,
