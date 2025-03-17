@@ -1,6 +1,8 @@
+use std::io;
+
 use controllers::{
-    addon_config::{AddonConfigSyncError, DynamicWatcherError},
-    BundleError, SyncError,
+    addon_config::{AddonConfigSyncError, DynamicWatcherError, FleetPatchError},
+    helm, BundleError, SyncError,
 };
 use futures::channel::mpsc::TrySendError;
 use thiserror::Error;
@@ -21,6 +23,18 @@ pub enum Error {
 
     #[error("Fleet config error: {0}")]
     FleetConfigError(#[from] AddonConfigSyncError),
+
+    #[error("Fleet chart patch error: {0}")]
+    FleetChartPatchError(#[from] FleetPatchError),
+
+    #[error("Fleet repo add error: {0}")]
+    RepoAdd(#[from] helm::RepoAddError),
+
+    #[error("Fleet repo update error: {0}")]
+    RepoUpdate(#[from] helm::RepoUpdateError),
+
+    #[error("Error waiting for commadnd: {0}")]
+    CommandError(#[from] io::Error),
 
     #[error("Dynamic watcher error: {0}")]
     DynamicWatcherError(#[from] DynamicWatcherError),

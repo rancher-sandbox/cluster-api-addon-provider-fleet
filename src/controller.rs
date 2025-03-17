@@ -9,13 +9,15 @@ use crate::metrics::Diagnostics;
 use crate::multi_dispatcher::{broadcaster, BroadcastStream, MultiDispatcher};
 use crate::{Error, Metrics};
 
+use chrono::Local;
 use clap::Parser;
 use futures::channel::mpsc;
 use futures::stream::SelectAll;
 use futures::{Stream, StreamExt};
 
 use k8s_openapi::api::core::v1::Namespace;
-use kube::api::{DynamicObject, ListParams};
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::{Condition, Time};
+use kube::api::{DynamicObject, Patch, PatchParams};
 use kube::core::DeserializeGuard;
 use kube::runtime::reflector::ObjectRef;
 use kube::runtime::{metadata_watcher, predicates, reflector, watcher, WatchStreamExt};
@@ -29,15 +31,15 @@ use kube::{
     },
 };
 use tokio::sync::Mutex;
-use tokio::time::sleep;
 
+use std::collections::BTreeMap;
 use std::future;
 
 use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::{sync::RwLock, time::Duration};
-use tracing::{self, info, warn};
+use tracing::{self, warn};
 
 type DynamicStream = SelectAll<
     Pin<Box<dyn Stream<Item = Result<watcher::Event<DynamicObject>, watcher::Error>> + Send>>,
@@ -189,7 +191,61 @@ pub async fn run_fleet_helm_controller(state: State) {
     let fleet_addon_config_controller = Controller::new(api, watcher::Config::default())
         .shutdown_on_signal()
         .run(
-            FleetAddonConfig::reconcile_helm,
+            |obj, ctx| async move {
+                let mut obj = obj.deref().clone();
+                obj.metadata.managed_fields = None;
+                obj.status = Some(obj.status.clone().unwrap_or_default());
+                let res = FleetAddonConfig::reconcile_helm(&mut obj, ctx.clone()).await;
+                if let Some(ref mut status) = obj.status {
+                    let conditions = &mut status.conditions;
+                    let mut message = "Addon provider is ready".to_string();
+                    let mut status = "True";
+                    if let Err(ref e) = res {
+                        message = format!("FleetAddonConfig reconcile error: {e}");
+                        status = "False";
+                    }
+                    conditions.push(Condition {
+                        last_transition_time: Time(Local::now().to_utc()),
+                        message,
+                        observed_generation: obj.metadata.generation,
+                        reason: "Ready".into(),
+                        status: status.into(),
+                        type_: "Ready".into(),
+                    });
+                }
+                if let Some(ref mut status) = obj.status {
+                    let mut uniques: BTreeMap<String, Condition> = BTreeMap::new();
+                    status
+                        .conditions
+                        .iter()
+                        .for_each(|e| match uniques.get(&e.type_) {
+                            Some(existing)
+                                if existing.message == e.message
+                                    && existing.reason == e.reason
+                                    && existing.status == e.status
+                                    && existing.observed_generation == e.observed_generation => {}
+                            _ => {
+                                uniques.insert(e.type_.clone(), e.clone());
+                            }
+                        });
+                    status.conditions = uniques.into_values().collect();
+                }
+                let api: Api<FleetAddonConfig> = Api::all(ctx.client.clone());
+                let patch = api
+                    .patch_status(
+                        &obj.name_any(),
+                        &PatchParams::apply("fleet-addon-controller").force(),
+                        &Patch::Apply(obj),
+                    )
+                    .await;
+                match res {
+                    Ok(_) => match patch {
+                        Ok(_) => res,
+                        Err(e) => Ok(Err(e)?),
+                    },
+                    e => e,
+                }
+            },
             error_policy,
             state.to_context(client.clone()),
         )

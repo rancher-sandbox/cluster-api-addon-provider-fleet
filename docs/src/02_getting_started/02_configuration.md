@@ -29,7 +29,7 @@ spec:
     server:
       inferLocal: true # Uses default `kuberenetes` endpoint and secret for APIServerURL configuration
   install:
-    version: v0.12.0-beta.1 # We will install alpha for helmapp support
+    version: v0.12.0-rc.1 # We will install alpha for helmapp support
 ```
 
 ### Fleet Public URL and Certificate setup
@@ -52,7 +52,7 @@ spec:
     server:
       inferLocal: true # Uses default `kuberenetes` endpoint and secret for APIServerURL configuration
   install:
-    version: v0.12.0-beta.1 # We will install alpha for helmapp support
+    version: v0.12.0-rc.1 # We will install alpha for helmapp support
 ```
 
 This scenario works well in a test setup, while using CAPI docker provider and docker clusters.
@@ -80,3 +80,24 @@ spec:
 ### Cluster Import Strategy
 
 -> [Import Strategy](../04_reference/01_import-strategy.md)
+
+### Fleet Feature Flags
+
+Fleet includes experimental features that can be enabled or disabled using feature gates in the `FleetAddonConfig` resource. These flags are configured under .spec.config.featureGates.
+
+To enable experimental features such as OCI storage support and `HelmApp` support, update the FleetAddonConfig as follows:
+
+```yaml
+apiVersion: addons.cluster.x-k8s.io/v1alpha1
+kind: FleetAddonConfig
+metadata:
+  name: fleet-addon-config
+spec:
+  config:
+    featureGates:
+      experimentalOciStorage: true   # Enables experimental OCI storage support
+      experimentalHelmOps: true      # Enables experimental Helm operations support
+```
+
+**By default, if the `featureGates` field is not present, these feature gates are *enabled*. To disable these need to explicitly be set to `false`.**
+
