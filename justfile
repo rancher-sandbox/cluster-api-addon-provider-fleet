@@ -154,7 +154,7 @@ deploy features="": _download-kustomize
     just build-and-load
     kustomize build config/default | kubectl apply -f -
     kubectl --context kind-dev apply -f testdata/config.yaml
-    kubectl wait fleetaddonconfigs fleet-addon-config --for=jsonpath='{.status.installedVersion}' --timeout=150s
+    kubectl wait fleetaddonconfigs fleet-addon-config --timeout=150s --for=condition=Ready=true
 
 undeploy: _download-kustomize
     kustomize build config/default | kubectl delete --ignore-not-found=true -f -

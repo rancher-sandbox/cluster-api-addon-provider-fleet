@@ -3,7 +3,7 @@
 <div class="warning">
 
 Note: For this setup to work, you need have Fleet and Fleet CRDs charts installed
-with version >= `v0.12.0-alpha.14`.
+with version >= `v0.12.0-rc.1`.
 
 </div>
 

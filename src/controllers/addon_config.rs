@@ -1,9 +1,13 @@
 use base64::prelude::*;
+use chrono::Local;
 use cluster_api_rs::capi_cluster::Cluster;
 use futures::StreamExt as _;
 use std::{fmt::Display, io, str::FromStr, sync::Arc, time::Duration};
 
-use k8s_openapi::api::core::v1::{self, ConfigMap, Endpoints};
+use k8s_openapi::{
+    api::core::v1::{self, ConfigMap, Endpoints},
+    apimachinery::pkg::apis::meta::v1::{Condition, Time},
+};
 use kube::{
     api::{ApiResource, ObjectMeta, Patch, PatchParams, TypeMeta},
     client::scope::Namespace,
@@ -29,7 +33,7 @@ use super::{
     controller::Context,
     helm::{
         self,
-        install::{ChartSearch, FleetChart},
+        install::{ChartSearch, FleetChart, FleetOptions, HelmOperation},
     },
 };
 
@@ -90,22 +94,55 @@ struct CertData {
 
 impl FleetAddonConfig {
     #[instrument(skip_all, fields(trace_id = display(telemetry::get_trace_id()), name = self.name_any(), namespace = self.namespace()))]
-    pub async fn reconcile_helm(self: Arc<Self>, ctx: Arc<Context>) -> crate::Result<Action> {
+    pub async fn reconcile_helm(&mut self, ctx: Arc<Context>) -> crate::Result<Action> {
+        let chart = FleetChart {
+            repo: "https://rancher.github.io/fleet-helm-charts/".into(),
+            namespace: "cattle-fleet-system".into(),
+            wait: true,
+            update_dependency: true,
+            create_namespace: true,
+            bootstrap_local_cluster: false,
+            ..Default::default()
+        };
+
+        if let Some(ref mut status) = self.status {
+            chart.add_repo()?.wait()?;
+
+            status.conditions.push(Condition {
+                last_transition_time: Time(Local::now().to_utc()),
+                message: format!("Repo added: {}", chart.repo),
+                observed_generation: self.metadata.generation,
+                reason: "RepoAdd".into(),
+                status: "True".into(),
+                type_: "RepoAdd".into(),
+            });
+
+            chart.update_repo()?.wait()?;
+
+            status.conditions.push(Condition {
+                last_transition_time: Time(Local::now().to_utc()),
+                message: format!("Repo updated: {}", chart.repo),
+                observed_generation: self.metadata.generation,
+                reason: "RepoUpdate".into(),
+                status: "True".into(),
+                type_: "RepoUpdate".into(),
+            });
+        }
+
         if let Some(install) = &self.spec.install {
-            self.install_fleet(
-                ctx.clone(),
-                FleetChart {
-                    repo: "https://rancher.github.io/fleet-helm-charts/".into(),
-                    namespace: "cattle-fleet-system".into(),
-                    version: install.install_version.clone(),
-                    wait: true,
-                    update_dependency: true,
-                    create_namespace: true,
-                    bootstrap_local_cluster: false,
-                    experimental_oci_ops: true,
-                },
-            )
-            .await?;
+            if let Some(requeue) = self
+                .install_fleet(FleetChart {
+                    version: Some(install.install_version.clone()),
+                    ..chart.clone()
+                })
+                .await?
+            {
+                return Ok(requeue);
+            }
+        }
+
+        if let Some(requeue) = self.update_flags(ctx.clone()).await? {
+            return Ok(requeue);
         }
 
         return Ok(Action::await_change());
@@ -119,10 +156,10 @@ impl FleetAddonConfig {
         let ns = Namespace::from("cattle-fleet-system");
         let mut fleet_config: FleetConfig = ctx.client.get("fleet-controller", &ns).await?;
 
-        if let Some(config) = self.spec().config.as_ref() {
-            self.update_certificate(ctx.clone(), &mut fleet_config, &config.server)
+        if let Some(server) = self.spec().config.as_ref().and_then(|c| c.server.as_ref()) {
+            self.update_certificate(ctx.clone(), &mut fleet_config, server)
                 .await?;
-            self.update_url(ctx.clone(), &mut fleet_config, &config.server)
+            self.update_url(ctx.clone(), &mut fleet_config, server)
                 .await?;
         }
 
@@ -264,86 +301,149 @@ impl FleetAddonConfig {
         Ok(())
     }
 
-    async fn install_fleet(
-        &self,
-        ctx: Arc<Context>,
-        chart: FleetChart,
-    ) -> AddonConfigSyncResult<Action> {
-        let mut config = self.clone();
-        let mut status = config.status.unwrap_or_default();
-        config.metadata.managed_fields = None;
+    async fn install_fleet(&mut self, chart: FleetChart) -> AddonConfigSyncResult<Option<Action>> {
+        if let Some(ref mut status) = self.status {
+            match (
+                FleetChart::get_metadata("fleet-crd")?,
+                chart
+                    .search_repo()?
+                    .into_iter()
+                    .find(|r| r.name == "fleet/fleet-crd"),
+                chart.version.clone().unwrap_or_default(),
+            ) {
+                (Some(installed), Some(search), Install::FollowLatest(true))
+                    if search.app_version != installed.app_version =>
+                {
+                    chart.fleet_crds(&HelmOperation::Upgrade)?.wait()?;
+                }
+                (Some(installed), Some(_), Install::Version(expected))
+                    if expected != installed.app_version =>
+                {
+                    chart.fleet_crds(&HelmOperation::Upgrade)?.wait()?;
+                }
+                (Some(_), Some(_), Install::FollowLatest(false)) => {}
+                (None, Some(_), _) => {
+                    chart.fleet_crds(&HelmOperation::Install)?.wait()?;
+                }
+                (_, _, _) => return Ok(Some(Action::requeue(Duration::from_secs(10)))),
+            };
 
-        chart.add_repo()?.wait()?;
-        chart.update_repo()?.wait()?;
+            match (
+                FleetChart::get_metadata("fleet")?,
+                chart
+                    .search_repo()?
+                    .into_iter()
+                    .find(|r| r.name == "fleet/fleet"),
+                chart.version.clone().unwrap_or_default(),
+            ) {
+                (Some(installed), Some(search), Install::FollowLatest(true))
+                    if search.app_version != installed.app_version =>
+                {
+                    chart.fleet(&HelmOperation::Upgrade)?.wait()?;
+                    status.installed_version = search.app_version.clone().into();
+                    status.conditions.push(Condition {
+                        last_transition_time: Time(Local::now().to_utc()),
+                        message: format!("Updated fleet to version {}", installed.app_version),
+                        observed_generation: self.metadata.generation,
+                        reason: "Installed".into(),
+                        status: "True".into(),
+                        type_: "Installed".into(),
+                    });
+                }
+                (Some(installed), Some(_), Install::Version(expected))
+                    if expected != installed.app_version =>
+                {
+                    chart.fleet(&HelmOperation::Upgrade)?.wait()?;
+                    status.installed_version = expected.clone().into();
+                    status.conditions.push(Condition {
+                        last_transition_time: Time(Local::now().to_utc()),
+                        message: format!("Updated fleet to version {}", expected),
+                        observed_generation: self.metadata.generation,
+                        reason: "Installed".into(),
+                        status: "True".into(),
+                        type_: "Installed".into(),
+                    });
+                }
+                (Some(installed), Some(_), Install::FollowLatest(false)) => {
+                    status.installed_version = installed.app_version.into();
+                }
+                (None, Some(ChartSearch { app_version, .. }), Install::FollowLatest(_))
+                | (None, Some(_), Install::Version(app_version)) => {
+                    chart.fleet(&HelmOperation::Install)?.wait()?;
+                    status.installed_version = app_version.clone().into();
+                    status.conditions.push(Condition {
+                        last_transition_time: Time(Local::now().to_utc()),
+                        message: format!("Installed fleet version {}", app_version),
+                        observed_generation: self.metadata.generation,
+                        reason: "Installed".into(),
+                        status: "True".into(),
+                        type_: "Installed".into(),
+                    });
+                }
+                (_, _, _) => return Ok(Some(Action::requeue(Duration::from_secs(10)))),
+            };
+        }
 
-        match (
-            chart.get_metadata("fleet")?,
-            chart
-                .search_repo()?
-                .into_iter()
-                .find(|r| r.name == "fleet/fleet"),
-            chart.version.clone(),
-        ) {
-            (Some(installed), Some(search), Install::FollowLatest(true))
-                if search.app_version != installed.app_version =>
-            {
-                chart.fleet("upgrade")?.wait()?;
-                status.installed_version = search.app_version.into();
-            }
-            (Some(installed), Some(_), Install::Version(expected))
-                if expected != installed.app_version =>
-            {
-                chart.fleet("upgrade")?.wait()?;
-                status.installed_version = expected.into();
-            }
-            (Some(installed), Some(_), Install::FollowLatest(false)) => {
-                status.installed_version = installed.app_version.into()
-            }
-            (None, Some(ChartSearch { app_version, .. }), Install::FollowLatest(_))
-            | (None, Some(_), Install::Version(app_version)) => {
-                chart.fleet("install")?.wait()?;
-                status.installed_version = app_version.into();
-            }
-            (_, _, _) => return Ok(Action::requeue(Duration::from_secs(10))),
-        };
-
-        match (
-            chart.get_metadata("fleet-crd")?,
-            chart
-                .search_repo()?
-                .into_iter()
-                .find(|r| r.name == "fleet/fleet-crd"),
-            chart.version.clone(),
-        ) {
-            (Some(installed), Some(search), Install::FollowLatest(true))
-                if search.app_version != installed.app_version =>
-            {
-                chart.fleet_crds("upgrade")?.wait()?;
-            }
-            (Some(installed), Some(_), Install::Version(expected))
-                if expected != installed.app_version =>
-            {
-                chart.fleet_crds("upgrade")?.wait()?;
-            }
-            (Some(_), Some(_), Install::FollowLatest(false)) => {}
-            (None, Some(_), _) => {
-                chart.fleet_crds("install")?.wait()?;
-            }
-            (_, _, _) => return Ok(Action::requeue(Duration::from_secs(10))),
-        };
-
-        config.status = Some(status);
-
-        let api: Api<Self> = Api::all(ctx.client.clone());
-        api.patch_status(
-            &self.name_any(),
-            &PatchParams::apply("fleet-addon-controller").force(),
-            &Patch::Apply(config),
-        )
-        .await?;
-
-        Ok(Action::await_change())
+        Ok(None)
     }
+
+    async fn update_flags(&mut self, _: Arc<Context>) -> FleetPatchResult<Option<Action>> {
+        if FleetChart::get_metadata("fleet")?.is_none() {
+            return Ok(Some(Action::requeue(Duration::from_secs(60))));
+        };
+
+        let feature_gates = self
+            .spec
+            .config
+            .clone()
+            .unwrap_or_default()
+            .feature_gates
+            .unwrap_or_default();
+
+        let options = FleetOptions {
+            namespace: "cattle-fleet-system".into(),
+            experimental_oci_storage: feature_gates.experimental_oci_storage,
+            experimental_helm_ops: feature_gates.experimental_helm_ops,
+        };
+        let message = format!("Updated chart flags to the expected state: {options}");
+        if let Some(ref mut status) = self.status {
+            if !status
+                .conditions
+                .iter()
+                .any(|c| c.type_ == "FlagsUpdate" && message == c.message)
+            {
+                options.patch_fleet()?.wait()?;
+
+                status.conditions.push(Condition {
+                    last_transition_time: Time(Local::now().to_utc()),
+                    message,
+                    observed_generation: self.metadata.generation,
+                    reason: "FlagsUpdate".into(),
+                    status: "True".into(),
+                    type_: "FlagsUpdate".into(),
+                });
+            }
+        }
+
+        Ok(None)
+    }
+}
+
+pub type FleetPatchResult<T> = std::result::Result<T, FleetPatchError>;
+
+#[derive(Error, Debug)]
+pub enum FleetPatchError {
+    #[error("Fleet patch error: {0}")]
+    FleetPatch(#[from] helm::FleetPatchError),
+
+    #[error("Fleet repo search error: {0}")]
+    RepoSearch(#[from] helm::RepoSearchError),
+
+    #[error("Fleet metadata check error: {0}")]
+    MetadataGet(#[from] helm::MetadataGetError),
+
+    #[error("Error waiting for command: {0}")]
+    CommandError(#[from] io::Error),
 }
 
 pub type AddonConfigSyncResult<T> = std::result::Result<T, AddonConfigSyncError>;
@@ -358,12 +458,6 @@ pub enum AddonConfigSyncError {
 
     #[error("Fleet CRD install error: {0}")]
     CRDInstall(#[from] helm::FleetCRDInstallError),
-
-    #[error("Fleet repo add error: {0}")]
-    RepoAdd(#[from] helm::RepoAddError),
-
-    #[error("Fleet repo update error: {0}")]
-    RepoUpdate(#[from] helm::RepoUpdateError),
 
     #[error("Fleet repo search error: {0}")]
     RepoSearch(#[from] helm::RepoSearchError),

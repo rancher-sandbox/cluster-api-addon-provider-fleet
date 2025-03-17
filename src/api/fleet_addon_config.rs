@@ -1,6 +1,7 @@
 use fleet_api_rs::fleet_cluster::{ClusterAgentEnvVars, ClusterAgentTolerations};
 use k8s_openapi::{
-    api::core::v1::ObjectReference, apimachinery::pkg::apis::meta::v1::LabelSelector,
+    api::core::v1::ObjectReference,
+    apimachinery::pkg::apis::meta::v1::{Condition, LabelSelector},
 };
 use kube::{
     core::{ParseExpressionError, Selector},
@@ -48,6 +49,7 @@ impl Default for FleetAddonConfig {
             spec: FleetAddonConfigSpec {
                 cluster_class: Some(ClusterClassConfig::default()),
                 cluster: Some(ClusterConfig::default()),
+                config: Some(FleetConfig::default()),
                 ..Default::default()
             },
             status: Default::default(),
@@ -59,6 +61,9 @@ impl Default for FleetAddonConfig {
 #[serde(rename_all = "camelCase")]
 pub struct FleetAddonConfigStatus {
     pub installed_version: Option<String>,
+    /// conditions represents the observations of a Fleet addon current state.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conditions: Vec<Condition>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, JsonSchema)]
@@ -205,7 +210,41 @@ impl Default for ClusterConfig {
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct FleetConfig {
-    pub server: Server,
+    /// fleet server url configuration options
+    pub server: Option<Server>,
+    /// feature gates controlling experimental features
+    pub feature_gates: Option<FeatureGates>,
+}
+
+impl Default for FleetConfig {
+    fn default() -> Self {
+        Self {
+            server: Default::default(),
+            feature_gates: Some(FeatureGates::default()),
+        }
+    }
+}
+
+/// Feature toggles for enabling or disabling experimental functionality.
+/// This struct controls access to specific experimental features.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FeatureGates {
+    /// Enables experimental OCI  storage support.
+    pub experimental_oci_storage: bool,
+
+    /// Enables experimental Helm operations support.
+    pub experimental_helm_ops: bool,
+}
+
+impl Default for FeatureGates {
+    fn default() -> Self {
+        Self {
+            // Unless is set otherwise, these features are enabled by CAAPF
+            experimental_oci_storage: true,
+            experimental_helm_ops: true,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]

@@ -10,6 +10,14 @@ pub enum FleetInstallError {
     FleetInstall(#[from] io::Error),
 }
 
+pub type FleetPatchResult<T> = std::result::Result<T, FleetPatchError>;
+
+#[derive(Error, Debug)]
+pub enum FleetPatchError {
+    #[error("Fleet chart patch error: {0}")]
+    FleetPatch(#[from] io::Error),
+}
+
 pub type FleetCRDInstallResult<T> = std::result::Result<T, FleetCRDInstallError>;
 
 #[derive(Error, Debug)]
