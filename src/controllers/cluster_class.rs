@@ -3,12 +3,10 @@ use crate::api::capi_clusterclass::ClusterClass;
 use crate::api::fleet_addon_config::{ClusterClassConfig, FleetAddonConfig};
 use crate::api::fleet_clustergroup::ClusterGroup;
 
-use fleet_api_rs::fleet_clustergroup::{ClusterGroupSelector, ClusterGroupSpec};
-use kube::api::{ObjectMeta, PatchParams, TypeMeta};
+use kube::api::PatchParams;
 
-use kube::{api::ResourceExt, runtime::controller::Action, Resource};
+use kube::runtime::controller::Action;
 
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use super::controller::{
@@ -16,48 +14,9 @@ use super::controller::{
 };
 use super::{BundleResult, GroupSyncResult};
 
-pub static CLUSTER_CLASS_LABEL: &str = "clusterclass-name.fleet.addons.cluster.x-k8s.io";
-pub static CLUSTER_CLASS_NAMESPACE_LABEL: &str =
-    "clusterclass-namespace.fleet.addons.cluster.x-k8s.io";
-
 pub struct FleetClusterClassBundle {
     fleet_group: ClusterGroup,
     config: FleetAddonConfig,
-}
-
-impl From<&ClusterClass> for ClusterGroup {
-    fn from(cluster_class: &ClusterClass) -> Self {
-        let labels = {
-            let mut labels = BTreeMap::default();
-            labels.insert(CLUSTER_CLASS_LABEL.to_string(), cluster_class.name_any());
-            labels.insert(
-                CLUSTER_CLASS_NAMESPACE_LABEL.to_string(),
-                cluster_class.namespace().unwrap_or_default(),
-            );
-            Some(labels)
-        };
-        Self {
-            types: Some(TypeMeta::resource::<ClusterGroup>()),
-            metadata: ObjectMeta {
-                name: Some(cluster_class.name_any()),
-                namespace: cluster_class.meta().namespace.clone(),
-                labels: labels.clone(),
-                owner_references: cluster_class
-                    .owner_ref(&())
-                    .into_iter()
-                    .map(Into::into)
-                    .collect(),
-                ..Default::default()
-            },
-            spec: ClusterGroupSpec {
-                selector: Some(ClusterGroupSelector {
-                    match_labels: labels,
-                    ..Default::default()
-                }),
-            },
-            ..Default::default()
-        }
-    }
 }
 
 impl FleetBundle for FleetClusterClassBundle {
@@ -67,12 +26,12 @@ impl FleetBundle for FleetClusterClassBundle {
             true => {
                 patch(
                     ctx,
-                    self.fleet_group.clone(),
+                    &self.fleet_group,
                     &PatchParams::apply("addon-provider-fleet"),
                 )
                 .await?
             }
-            false => get_or_create(ctx.clone(), self.fleet_group.clone()).await?,
+            false => get_or_create(ctx.clone(), &self.fleet_group).await?,
         };
 
         Ok(Action::await_change())

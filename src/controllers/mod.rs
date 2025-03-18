@@ -13,6 +13,9 @@ pub enum SyncError {
 
     #[error("Cluster registration token create error {0}")]
     ClusterRegistrationTokenSync(#[from] GetOrCreateError),
+
+    #[error("BundleNamespaceMapping delete error: {0}")]
+    BundleNsMappingDelete(#[from] kube::Error),
 }
 
 pub type ClusterSyncResult<T, E = ClusterSyncError> = std::result::Result<T, E>;
@@ -28,6 +31,12 @@ pub enum ClusterSyncError {
     #[error("Cluster group update error: {0}")]
     GroupPatchError(#[source] PatchError),
 
+    #[error("Cluster BundleNamespaceMapping update error: {0}")]
+    BundleNamespaceMappingError(#[source] PatchError),
+
+    #[error("Cluster BundleNamespaceMapping lookup error")]
+    MappingLookupError(#[from] kube::Error),
+
     #[error("Cluster json encoding error: {0}")]
     ClusterEncodeError(#[from] serde_json::Error),
 }
@@ -41,6 +50,9 @@ pub enum GroupSyncError {
 
     #[error("Cluster group update error: {0}")]
     PatchError(#[from] PatchError),
+
+    #[error("Unable to find origin ClusterClass for the ClusterGroup: {0}")]
+    ClassLookup(#[from] kube::Error),
 }
 
 pub type GetOrCreateResult<T, E = GetOrCreateError> = std::result::Result<T, E>;
@@ -88,6 +100,15 @@ pub enum BundleError {
 
     #[error("{0}")]
     Config(#[from] ConfigFetchError),
+
+    #[error("BundleNamespaceMapping creating error: {0}")]
+    Mapping(#[from] BundleMappingError),
+}
+
+#[derive(Error, Debug)]
+pub enum BundleMappingError {
+    #[error("ClusterClass lookup error: {0}")]
+    ClusterClassLookup(#[from] kube::Error),
 }
 
 pub type ConfigFetchResult<T> = std::result::Result<T, ConfigFetchError>;

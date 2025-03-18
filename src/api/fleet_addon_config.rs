@@ -178,6 +178,10 @@ impl ClusterConfig {
         let strategy = self.naming.clone().unwrap_or_default();
         strategy.apply(name.clone().into()).unwrap_or(name)
     }
+
+    pub(crate) fn apply_class_group(&self) -> bool {
+        self.apply_class_group.is_some_and(|enabled| enabled)
+    }
 }
 
 /// NamingStrategy is controlling Fleet cluster naming
