@@ -100,6 +100,7 @@ rules:
   - clusters
   - clustergroups
   - clusterregistrationtokens
+  - bundlenamespacemappings
   verbs:
   - create
   - get

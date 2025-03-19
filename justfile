@@ -90,7 +90,7 @@ start-dev: _cleanup-out-dir _create-out-dir _download-kubectl
     kind delete cluster --name dev || true
     kind create cluster --image=kindest/node:v{{KUBE_VERSION}} --config testdata/kind-config.yaml
     just install-capi
-    kubectl wait pods --for=condition=Ready --timeout=150s --all --all-namespaces
+    kubectl wait pods --for=condition=Ready --timeout=300s --all --all-namespaces
 
 # Stop the local dev environment
 stop-dev:
@@ -101,7 +101,7 @@ deploy-kindnet:
     kubectl --context kind-dev apply -f testdata/cni.yaml
 
 deploy-calico:
-    kubectl --context kind-dev apply -f testdata/helm.yaml
+    kubectl --context kind-dev apply -f testdata/helm.yaml -n clusterclass
 
 deploy-calico-gitrepo: _download-yq
     #!/usr/bin/env bash
@@ -179,7 +179,7 @@ collect-test-import:
     -just collect-artifacts docker-demo
 
 # Full e2e test of importing cluster in fleet
-test-cluster-class-import: start-dev deploy deploy-child-cluster-class deploy-calico deploy-app _test-import-all && collect-test-cluster-class-import
+test-cluster-class-import: start-dev deploy deploy-child-cluster-class deploy-calico deploy-app _test-import-all _test-delete-all && collect-test-cluster-class-import
 
 collect-test-cluster-class-import:
     -just collect-artifacts dev
@@ -192,6 +192,7 @@ test-cluster-class-import-agent-initated: start-dev && collect-test-cluster-clas
     just deploy-kindnet
     just deploy-app
     just _test-import-all
+    just _test-delete-all
 
 collect-artifacts cluster:
     kind get kubeconfig --name {{cluster}} > {{OUT_DIR}}/kubeconfig
@@ -200,15 +201,19 @@ collect-artifacts cluster:
 # Full e2e test of importing cluster and ClusterClass in fleet
 [private]
 _test-import-all:
-    kubectl wait pods --for=condition=Ready --timeout=150s --all --all-namespaces
-    kubectl wait clustergroups.fleet.cattle.io -n clusterclass --timeout=300s --for=condition=Ready=true quick-start
-    kubectl wait clustergroups.fleet.cattle.io -n clusterclass --timeout=300s --for=condition=Ready=true quick-start
+    kubectl wait clustergroups.fleet.cattle.io -n clusterclass --timeout=300s --for=create --for=condition=Ready=true quick-start
     # Verify that cluster group created for cluster referencing clusterclass in a different namespace
-    kubectl wait clustergroups.fleet.cattle.io --timeout=150s --for=create quick-start.clusterclass
-    kubectl wait clustergroups.fleet.cattle.io --timeout=150s --for=jsonpath='{.status.clusterCount}=1' quick-start.clusterclass
-    kubectl wait clustergroups.fleet.cattle.io --timeout=300s --for=condition=Ready=true quick-start.clusterclass
-    kubectl wait clusters.fleet.cattle.io --timeout=150s --for=create capi-quickstart
-    kubectl wait clusters.fleet.cattle.io --timeout=300s --for=condition=Ready=true capi-quickstart
+    kubectl wait bundlenamespacemappings.fleet.cattle.io --timeout=300s --for=create -n clusterclass default
+    kubectl wait clustergroups.fleet.cattle.io --timeout=300s --for=create --for=jsonpath='{.status.clusterCount}=1' --for=condition=Ready=true quick-start.clusterclass
+    kubectl wait clusters.fleet.cattle.io --timeout=300s --for=create --for=condition=Ready=true capi-quickstart
+
+[private]
+_test-delete-all:
+    # Verify that deleting everything causes full re-import
+    kubectl delete clustergroups.fleet.cattle.io -n clusterclass quick-start --wait
+    kubectl delete bundlenamespacemappings.fleet.cattle.io -n clusterclass default --wait
+    kubectl delete clusters.fleet.cattle.io capi-quickstart --wait
+    just _test-import-all
 
 # Install kopium
 [private]

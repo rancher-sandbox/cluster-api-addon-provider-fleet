@@ -1,3 +1,4 @@
+use crate::api::bundle_namespace_mapping::BundleNamespaceMapping;
 use crate::api::capi_cluster::Cluster;
 use crate::api::capi_clusterclass::ClusterClass;
 use crate::api::fleet_addon_config::FleetAddonConfig;
@@ -273,7 +274,6 @@ pub async fn run_cluster_controller(state: State) {
         )
         .for_each(|_| futures::future::ready(()));
 
-    let (sub, reader) = state.dispatcher.subscribe();
     let fleet = metadata_watcher(
         Api::<fleet_cluster::Cluster>::all(client.clone()),
         Config::default().any_semantic(),
@@ -282,8 +282,27 @@ pub async fn run_cluster_controller(state: State) {
     .touched_objects()
     .predicate_filter(predicates::resource_version);
 
-    let clusters = Controller::for_shared_stream(sub, reader)
+    let mappings = metadata_watcher(
+        Api::<BundleNamespaceMapping>::all(client.clone()),
+        Config::default().any_semantic(),
+    )
+    .modify(|g| g.managed_fields_mut().clear())
+    .touched_objects()
+    .predicate_filter(predicates::resource_version);
+
+    let (sub, reader) = state.dispatcher.subscribe();
+    let clusters = Controller::for_shared_stream(sub, reader.clone())
         .owns_stream(fleet)
+        .watches_stream(mappings, move |mapping| {
+            reader
+                .state()
+                .into_iter()
+                .filter_map(move |c: Arc<Cluster>| {
+                    let in_namespace =
+                        c.spec.topology.as_ref()?.class_namespace == mapping.namespace();
+                    in_namespace.then_some(ObjectRef::from_obj(c.deref()))
+                })
+        })
         .shutdown_on_signal()
         .run(
             Cluster::reconcile,
@@ -332,9 +351,27 @@ pub async fn run_cluster_controller_pre_1_32(state: State) {
     .touched_objects()
     .predicate_filter(predicates::resource_version);
 
+    let mappings = metadata_watcher(
+        Api::<BundleNamespaceMapping>::all(client.clone()),
+        Config::default().any_semantic(),
+    )
+    .modify(|g| g.managed_fields_mut().clear())
+    .touched_objects()
+    .predicate_filter(predicates::resource_version);
+
     let (invoke_reconcile, namespace_trigger) = mpsc::channel(0);
-    let clusters = Controller::for_stream(clusters, reader)
+    let clusters = Controller::for_stream(clusters, reader.clone())
         .owns_stream(fleet)
+        .watches_stream(mappings, move |mapping| {
+            reader
+                .state()
+                .into_iter()
+                .filter_map(move |c: Arc<Cluster>| {
+                    let in_namespace =
+                        c.spec.topology.as_ref()?.class_namespace == mapping.namespace();
+                    in_namespace.then_some(ObjectRef::from_obj(c.deref()))
+                })
+        })
         .reconcile_all_on(namespace_trigger)
         .shutdown_on_signal()
         .run(

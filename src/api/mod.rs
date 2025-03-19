@@ -1,3 +1,4 @@
+pub mod bundle_namespace_mapping;
 pub mod capi_cluster;
 pub mod capi_clusterclass;
 pub mod fleet_addon_config;
