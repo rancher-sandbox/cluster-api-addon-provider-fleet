@@ -7,8 +7,7 @@ use crate::api::fleet_cluster::{self};
 #[cfg(feature = "agent-initiated")]
 use crate::api::fleet_cluster_registration_token::ClusterRegistrationToken;
 use crate::api::fleet_clustergroup::ClusterGroup;
-use crate::Error;
-use futures::channel::mpsc::Sender;
+use crate::controllers::addon_config::to_dynamic_event;
 use futures::StreamExt as _;
 use k8s_openapi::api::core::v1::Namespace;
 use kube::api::{ApiResource, ListParams, Object, PatchParams};
@@ -22,16 +21,14 @@ use kube::{Api, Client};
 use rand::distr::{Alphanumeric, SampleString as _};
 use serde::Serialize;
 use serde_json::Value;
-use tokio::sync::Mutex;
-use tracing::{info, warn};
+use tracing::info;
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use super::controller::{
     fetch_config, get_or_create, patch, Context, FleetBundle, FleetController,
 };
-use super::{BundleResult, ClusterSyncError, ClusterSyncResult, LabelCheckResult};
+use super::{BundleResult, ClusterSyncError, ClusterSyncResult};
 
 pub static CONTROLPLANE_READY_CONDITION: &str = "ControlPlaneReady";
 
@@ -191,10 +188,6 @@ impl FleetController for Cluster {
     async fn to_bundle(&self, ctx: Arc<Context>) -> BundleResult<Option<FleetClusterBundle>> {
         let config = fetch_config(ctx.client.clone()).await?;
 
-        if ctx.version < 32 && !self.matching_labels(&config, ctx.client.clone()).await? {
-            return Ok(None);
-        }
-
         if !config.cluster_operations_enabled() {
             return Ok(None);
         }
@@ -231,53 +224,32 @@ impl Cluster {
         ns: Arc<Namespace>,
         ctx: Arc<Context>,
     ) -> crate::Result<Action> {
-        ctx.stream.stream.lock().await.push(
-            watcher::watcher(
-                Api::namespaced_with(
-                    ctx.client.clone(),
-                    &ns.name_any(),
-                    &ApiResource::erase::<Cluster>(&()),
-                ),
-                Config::default().streaming_lists(),
-            )
-            .boxed(),
-        );
+        if ctx.version >= 32 {
+            ctx.stream.stream.lock().await.push(
+                watcher::watcher(
+                    Api::namespaced_with(
+                        ctx.client.clone(),
+                        &ns.name_any(),
+                        &ApiResource::erase::<Cluster>(&()),
+                    ),
+                    Config::default().streaming_lists(),
+                )
+                .boxed(),
+            );
+        } else {
+            ctx.stream.stream.lock().await.push(
+                watcher::watcher(
+                    Api::<Cluster>::namespaced(ctx.client.clone(), &ns.name_any()),
+                    Config::default(),
+                )
+                .map(to_dynamic_event)
+                .boxed(),
+            );
+        }
 
         let name = ns.name_any();
         info!("Reconciled dynamic watches: added namespace watch on {name}");
 
         Ok(Action::await_change())
-    }
-
-    pub async fn matching_labels(
-        &self,
-        config: &FleetAddonConfig,
-        client: Client,
-    ) -> LabelCheckResult<bool> {
-        let matches = config.cluster_selector()?.matches(self.labels()) || {
-            let ns = self.namespace().unwrap_or("default".into());
-            let namespace: Namespace = Api::all(client).get(ns.as_str()).await?;
-            config.namespace_selector()?.matches(namespace.labels())
-        };
-
-        Ok(matches)
-    }
-
-    pub async fn reconcile_ns(
-        _: Arc<impl Resource>,
-        invoke_reconcile: Arc<Mutex<Sender<()>>>,
-    ) -> crate::Result<Action> {
-        let mut sender = invoke_reconcile.lock().await;
-        sender.try_send(())?;
-        Ok(Action::await_change())
-    }
-
-    pub fn ns_trigger_error_policy(
-        _: Arc<impl kube::Resource>,
-        error: &Error,
-        _: Arc<Mutex<Sender<()>>>,
-    ) -> Action {
-        warn!("triggrer invocation failed: {:?}", error);
-        Action::requeue(Duration::from_secs(5))
     }
 }
