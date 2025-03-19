@@ -34,7 +34,7 @@ impl From<&Cluster> for ObjectMeta {
     fn from(cluster: &Cluster) -> Self {
         Self {
             name: Some(cluster.name_any()),
-            namespace: cluster.meta().namespace.clone(),
+            namespace: cluster.namespace(),
             ..Default::default()
         }
     }
@@ -167,8 +167,8 @@ impl Cluster {
     ) -> Option<BundleNamespaceMapping> {
         config?.apply_class_group().then_some(true)?;
 
-        let topology = self.spec.topology.clone()?;
-        let class_namespace = topology.class_namespace?;
+        let topology = self.spec.topology.as_ref()?;
+        let class_namespace = topology.class_namespace.clone()?;
 
         let match_labels = {
             let mut labels = BTreeMap::default();
@@ -194,7 +194,7 @@ impl Cluster {
     #[cfg(feature = "agent-initiated")]
     pub(crate) fn to_cluster_registration_token(
         self: &Cluster,
-        config: Option<ClusterConfig>,
+        config: Option<&ClusterConfig>,
     ) -> Option<ClusterRegistrationToken> {
         use fleet_api_rs::fleet_cluster_registration_token::ClusterRegistrationTokenSpec;
 

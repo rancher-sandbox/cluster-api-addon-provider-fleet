@@ -14,19 +14,19 @@ use super::{BundleResult, GroupSyncResult};
 impl FleetBundle for ClusterGroup {
     // Applies finalizer on the existing ClusterGroup object, so the deletion event is not missed
     #[allow(refining_impl_trait)]
-    async fn sync(&self, ctx: Arc<Context>) -> GroupSyncResult<Action> {
+    async fn sync(&mut self, ctx: Arc<Context>) -> GroupSyncResult<Action> {
         if let Some(cc_ref) = self.cluster_class_ref() {
             let class = ctx.client.fetch::<ClusterClass>(&cc_ref).await?;
+            self.labels_mut().extend(
+                class
+                    .labels()
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), v.to_string())),
+            );
+
             patch(
                 ctx.clone(),
-                &{
-                    let mut group = self.clone();
-                    let labels = group.labels_mut();
-                    class.labels().iter().for_each(|(key, value)| {
-                        labels.insert(key.to_string(), value.to_string());
-                    });
-                    group
-                },
+                self,
                 &PatchParams::apply("addon-provider-fleet"),
             )
             .await?;
@@ -35,7 +35,7 @@ impl FleetBundle for ClusterGroup {
         Ok(Action::await_change())
     }
 
-    async fn cleanup(&self, ctx: Arc<Context>) -> Result<Action, super::SyncError> {
+    async fn cleanup(&mut self, ctx: Arc<Context>) -> Result<Action, super::SyncError> {
         let class_ns = self.cluster_class_namespace();
         let namespace = self.namespace();
         if class_ns.is_some() && class_ns != namespace {

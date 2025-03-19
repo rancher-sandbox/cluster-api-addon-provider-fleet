@@ -21,12 +21,12 @@ pub struct FleetClusterClassBundle {
 
 impl FleetBundle for FleetClusterClassBundle {
     #[allow(refining_impl_trait)]
-    async fn sync(&self, ctx: Arc<Context>) -> GroupSyncResult<Action> {
+    async fn sync(&mut self, ctx: Arc<Context>) -> GroupSyncResult<Action> {
         match self.config.cluster_class_patch_enabled() {
             true => {
                 patch(
                     ctx,
-                    &self.fleet_group,
+                    &mut self.fleet_group,
                     &PatchParams::apply("addon-provider-fleet"),
                 )
                 .await?
@@ -42,7 +42,7 @@ impl FleetController for ClusterClass {
     type Bundle = FleetClusterClassBundle;
 
     async fn to_bundle(&self, ctx: Arc<Context>) -> BundleResult<Option<FleetClusterClassBundle>> {
-        let config = fetch_config(ctx.clone().client.clone()).await?;
+        let config = fetch_config(ctx.client.clone()).await?;
         if !config.cluster_class_operations_enabled() {
             return Ok(None);
         }

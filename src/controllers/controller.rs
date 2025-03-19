@@ -99,21 +99,16 @@ where
     Ok(Action::await_change())
 }
 
-pub(crate) async fn patch<R>(ctx: Arc<Context>, res: &R, pp: &PatchParams) -> PatchResult<Action>
+pub(crate) async fn patch<R>(ctx: Arc<Context>, res: &mut R, pp: &PatchParams) -> PatchResult<Action>
 where
     R: std::fmt::Debug,
     R: Clone + Serialize + DeserializeOwned,
     R: kube::Resource<DynamicType = (), Scope = NamespaceResourceScope>,
     R: kube::ResourceExt,
 {
-    let ns = res
-        .meta()
-        .namespace
-        .clone()
-        .unwrap_or(String::from("default"));
+    let ns = res.namespace().unwrap_or(String::from("default"));
     let api: Api<R> = Api::namespaced(ctx.client.clone(), &ns);
 
-    let mut res = res.clone();
     res.meta_mut().managed_fields = None;
 
     api.patch(&res.name_any(), pp, &Patch::Apply(&res))
@@ -153,8 +148,8 @@ pub(crate) async fn fetch_config(client: Client) -> ConfigFetchResult<FleetAddon
 }
 
 pub(crate) trait FleetBundle {
-    async fn sync(&self, ctx: Arc<Context>) -> Result<Action, impl Into<SyncError>>;
-    async fn cleanup(&self, _ctx: Arc<Context>) -> Result<Action, SyncError> {
+    async fn sync(&mut self, ctx: Arc<Context>) -> Result<Action, impl Into<SyncError>>;
+    async fn cleanup(&mut self, _ctx: Arc<Context>) -> Result<Action, SyncError> {
         Ok(Action::await_change())
     }
 }
@@ -179,7 +174,7 @@ where
         finalizer(&api, FLEET_FINALIZER, self, |event| async {
             match event {
                 finalizer::Event::Apply(c) => match c.to_bundle(ctx.clone()).await? {
-                    Some(bundle) => bundle
+                    Some(mut bundle) => bundle
                         .sync(ctx)
                         .await
                         .map_err(Into::into)
@@ -211,7 +206,7 @@ where
             )
             .await?;
 
-        if let Some(bundle) = self.to_bundle(ctx.clone()).await? {
+        if let Some(mut bundle) = self.to_bundle(ctx.clone()).await? {
             return Ok(bundle.cleanup(ctx).await?);
         }
 

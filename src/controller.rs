@@ -299,7 +299,7 @@ pub async fn run_cluster_controller(state: State) {
                 .into_iter()
                 .filter_map(move |c: Arc<Cluster>| {
                     let in_namespace =
-                        c.spec.topology.clone()?.class_namespace == mapping.namespace();
+                        c.spec.topology.as_ref()?.class_namespace == mapping.namespace();
                     in_namespace.then_some(ObjectRef::from_obj(c.deref()))
                 })
         })
@@ -368,7 +368,7 @@ pub async fn run_cluster_controller_pre_1_32(state: State) {
                 .into_iter()
                 .filter_map(move |c: Arc<Cluster>| {
                     let in_namespace =
-                        c.spec.topology.clone()?.class_namespace == mapping.namespace();
+                        c.spec.topology.as_ref()?.class_namespace == mapping.namespace();
                     in_namespace.then_some(ObjectRef::from_obj(c.deref()))
                 })
         })

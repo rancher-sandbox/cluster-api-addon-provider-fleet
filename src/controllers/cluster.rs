@@ -96,17 +96,17 @@ impl TemplateSources {
 
 impl FleetBundle for FleetClusterBundle {
     #[allow(refining_impl_trait)]
-    async fn sync(&self, ctx: Arc<Context>) -> ClusterSyncResult<Action> {
-        let mut cluster = self.fleet.clone();
+    async fn sync(&mut self, ctx: Arc<Context>) -> ClusterSyncResult<Action> {
+        let cluster = &mut self.fleet;
 
         if let Some(template) = self.template_sources.resolve(ctx.client.clone()).await {
             let template = serde_json::from_value(template)?;
             cluster.spec.template_values = Some(template);
         }
 
-        if let Some(mapping) = self.mapping.as_ref() {
+        if let Some(mapping) = self.mapping.as_mut() {
             if self.config.cluster_patch_enabled() {
-                let cluster_name = self.fleet.name_any();
+                let cluster_name = cluster.name_any();
                 patch(
                     ctx.clone(),
                     mapping,
@@ -125,12 +125,12 @@ impl FleetBundle for FleetClusterBundle {
             true => {
                 patch(
                     ctx.clone(),
-                    &cluster,
+                    cluster,
                     &PatchParams::apply("addon-provider-fleet"),
                 )
                 .await?
             }
-            false => get_or_create(ctx.clone(), &cluster).await?,
+            false => get_or_create(ctx.clone(), cluster).await?,
         };
 
         #[cfg(feature = "agent-initiated")]
@@ -138,7 +138,7 @@ impl FleetBundle for FleetClusterBundle {
             get_or_create(ctx.clone(), cluster_registration_token).await?;
         }
 
-        if let Some(group) = self.fleet_group.as_ref() {
+        if let Some(group) = self.fleet_group.as_mut() {
             let cluster_name = self.fleet.name_any();
             if self.config.cluster_patch_enabled() {
                 patch(
@@ -159,7 +159,7 @@ impl FleetController for Cluster {
     type Bundle = FleetClusterBundle;
 
     async fn to_bundle(&self, ctx: Arc<Context>) -> BundleResult<Option<FleetClusterBundle>> {
-        let config = fetch_config(ctx.clone().client.clone()).await?;
+        let config = fetch_config(ctx.client.clone()).await?;
 
         if ctx.version < 32 && !self.matching_labels(&config, ctx.client.clone()).await? {
             return Ok(None);
@@ -180,7 +180,7 @@ impl FleetController for Cluster {
             mapping: self.to_bundle_ns_mapping(config.spec.cluster.as_ref()),
             #[cfg(feature = "agent-initiated")]
             cluster_registration_token: self
-                .to_cluster_registration_token(config.spec.cluster.clone()),
+                .to_cluster_registration_token(config.spec.cluster.as_ref()),
             config,
         }))
     }
