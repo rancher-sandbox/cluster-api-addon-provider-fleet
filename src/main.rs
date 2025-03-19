@@ -2,7 +2,6 @@ use actix_web::{
     get, middleware, web::Data, App, HttpRequest, HttpResponse, HttpServer, Responder,
 };
 pub use controller::{self, telemetry, State};
-use futures::FutureExt;
 use kube::Client;
 use prometheus::{Encoder, TextEncoder};
 
@@ -51,16 +50,9 @@ async fn main() -> anyhow::Result<()> {
             tokio::join!(helm_install_controller);
         }
         false => {
-            let fleet_config_controller = if state.version >= 32 {
-                controller::run_fleet_addon_config_controller(state.clone()).boxed()
-            } else {
-                controller::run_fleet_addon_config_controller_pre_1_32(state.clone()).boxed()
-            };
-            let cluster_controller = if state.version >= 32 {
-                controller::run_cluster_controller(state.clone()).boxed()
-            } else {
-                controller::run_cluster_controller_pre_1_32(state.clone()).boxed()
-            };
+            let fleet_config_controller =
+                controller::run_fleet_addon_config_controller(state.clone());
+            let cluster_controller = controller::run_cluster_controller(state.clone());
             let cluster_class_controller = controller::run_cluster_class_controller(state.clone());
 
             // Start web server

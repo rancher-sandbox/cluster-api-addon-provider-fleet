@@ -12,7 +12,6 @@ use crate::{Error, Metrics};
 
 use chrono::Local;
 use clap::Parser;
-use futures::channel::mpsc;
 use futures::stream::SelectAll;
 use futures::{Stream, StreamExt};
 
@@ -32,7 +31,6 @@ use kube::{
     },
 };
 use kube::{Resource, ResourceExt};
-use tokio::sync::Mutex;
 
 use std::collections::BTreeMap;
 use std::future;
@@ -189,27 +187,6 @@ pub async fn run_fleet_addon_config_controller(state: State) {
     };
 }
 
-pub async fn run_fleet_addon_config_controller_pre_1_32(state: State) {
-    let client = Client::try_default()
-        .await
-        .expect("failed to create kube Client");
-    let api: Api<FleetAddonConfig> = Api::all(client.clone());
-    let fleet_addon_config_controller = Controller::new(api, watcher::Config::default())
-        .watches(
-            Api::<DeserializeGuard<FleetConfig>>::all(client.clone()),
-            Config::default().fields("metadata.name=fleet-controller"),
-            |config| config.0.ok().map(|_| ObjectRef::new("fleet-addon-config")),
-        )
-        .run(
-            FleetAddonConfig::reconcile_config_sync,
-            error_policy,
-            state.to_context(client.clone()),
-        )
-        .default_backoff()
-        .for_each(|_| futures::future::ready(()));
-    tokio::join!(fleet_addon_config_controller);
-}
-
 pub async fn run_fleet_helm_controller(state: State) {
     let client = Client::try_default()
         .await
@@ -347,108 +324,6 @@ pub async fn run_cluster_controller(state: State) {
             Cluster::reconcile,
             error_policy,
             state.to_context(client.clone()),
-        )
-        .default_backoff()
-        .for_each(|_| futures::future::ready(()));
-
-    tokio::join!(clusters, ns_controller);
-}
-
-/// Initialize the controller and shared state (given the crd is installed)
-pub async fn run_cluster_controller_pre_1_32(state: State) {
-    let client = Client::try_default()
-        .await
-        .expect("failed to create kube Client");
-
-    let config = fetch_config(client.clone())
-        .await
-        .expect("failed to get FleetAddonConfig resource");
-
-    let (reader, writer) = reflector::store();
-    let clusters = default_with_reflect(
-        writer,
-        watcher(
-            Api::<Cluster>::all(client.clone()),
-            Config::default()
-                .labels_from(
-                    &config
-                        .cluster_watch()
-                        .expect("valid cluster label selector"),
-                )
-                .any_semantic(),
-        ),
-    );
-
-    let fleet = default_handling(metadata_watcher(
-        Api::<fleet_cluster::Cluster>::all(client.clone()),
-        Config::default().any_semantic(),
-    ));
-
-    let groups = default_handling(metadata_watcher(
-        Api::<ClusterGroup>::all(client.clone()),
-        Config::default()
-            .labels_from(&ClusterGroup::group_selector())
-            .any_semantic(),
-    ));
-
-    let mappings = default_handling(metadata_watcher(
-        Api::<BundleNamespaceMapping>::all(client.clone()),
-        Config::default().any_semantic(),
-    ));
-
-    let (invoke_reconcile, namespace_trigger) = mpsc::channel(0);
-    let clusters = Controller::for_stream(clusters, reader.clone())
-        .owns_stream(fleet)
-        .owns_stream(groups)
-        .watches_stream(mappings, move |mapping| {
-            reader
-                .state()
-                .into_iter()
-                .filter_map(move |c: Arc<Cluster>| {
-                    let in_namespace =
-                        c.spec.topology.as_ref()?.class_namespace == mapping.namespace();
-                    in_namespace.then_some(ObjectRef::from_obj(c.deref()))
-                })
-        })
-        .reconcile_all_on(namespace_trigger)
-        .shutdown_on_signal()
-        .run(
-            Cluster::reconcile,
-            error_policy,
-            state.to_context(client.clone()),
-        )
-        .default_backoff()
-        .for_each(|_| futures::future::ready(()));
-
-    if config
-        .namespace_selector()
-        .expect("valid namespace selector")
-        .selects_all()
-    {
-        return clusters.await;
-    }
-
-    let (reader, writer) = reflector::store();
-    let namespaces = default_with_reflect(
-        writer,
-        metadata_watcher(
-            Api::<Namespace>::all(client.clone()),
-            Config::default()
-                .labels_from(
-                    &config
-                        .namespace_selector()
-                        .expect("valid namespace selector"),
-                )
-                .any_semantic(),
-        ),
-    );
-
-    let ns_controller = Controller::for_stream(namespaces, reader)
-        .shutdown_on_signal()
-        .run(
-            Cluster::reconcile_ns,
-            Cluster::ns_trigger_error_policy,
-            Arc::new(Mutex::new(invoke_reconcile)),
         )
         .default_backoff()
         .for_each(|_| futures::future::ready(()));
