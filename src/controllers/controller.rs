@@ -19,6 +19,7 @@ use kube::{api::Api, client::Client, runtime::controller::Action};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
+use std::fmt::Debug;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -99,10 +100,13 @@ where
     Ok(Action::await_change())
 }
 
-pub(crate) async fn patch<R>(ctx: Arc<Context>, res: &mut R, pp: &PatchParams) -> PatchResult<Action>
+pub(crate) async fn patch<R>(
+    ctx: Arc<Context>,
+    res: &mut R,
+    pp: &PatchParams,
+) -> PatchResult<Action>
 where
-    R: std::fmt::Debug,
-    R: Clone + Serialize + DeserializeOwned,
+    R: Clone + Serialize + DeserializeOwned + Debug,
     R: kube::Resource<DynamicType = (), Scope = NamespaceResourceScope>,
     R: kube::ResourceExt,
 {

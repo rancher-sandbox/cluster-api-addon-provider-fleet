@@ -269,6 +269,18 @@ pub enum Install {
     Version(String),
 }
 
+impl Install {
+    /// Perform version normalization for comparison with `helm search` app_version output
+    pub(crate) fn normalized(self) -> Self {
+        match self {
+            Install::FollowLatest(_) => self,
+            Install::Version(version) => {
+                Install::Version(version.strip_prefix("v").unwrap_or(&version).into())
+            }
+        }
+    }
+}
+
 impl Default for Install {
     fn default() -> Self {
         Self::FollowLatest(true)
@@ -314,16 +326,6 @@ pub struct Selectors {
 }
 
 impl FleetAddonConfig {
-    // Provide a static label selector for cluster objects, which can be always be set
-    // and will not cause cache events from resources in the labeled Namespace to be missed
-    pub(crate) fn cluster_watch(&self) -> Result<Selector, ParseExpressionError> {
-        Ok(self
-            .namespace_selector()?
-            .selects_all()
-            .then_some(self.cluster_selector()?)
-            .unwrap_or_default())
-    }
-
     // Raw cluster selector
     pub(crate) fn cluster_selector(&self) -> Result<Selector, ParseExpressionError> {
         self.spec

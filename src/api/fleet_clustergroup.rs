@@ -6,6 +6,7 @@ use fleet_api_rs::fleet_clustergroup::{
 use k8s_openapi::api::core::v1::ObjectReference;
 use kube::{
     api::{ObjectMeta, TypeMeta},
+    core::{Expression, Selector},
     runtime::reflector::ObjectRef,
     Resource, ResourceExt as _,
 };
@@ -50,6 +51,13 @@ impl ClusterGroup {
                 .within(&namespace)
                 .into(),
         )
+    }
+
+    pub(crate) fn group_selector() -> Selector {
+        Selector::from_iter([
+            Expression::Exists(CLUSTER_CLASS_LABEL.to_string()),
+            Expression::Exists(CLUSTER_CLASS_NAMESPACE_LABEL.to_string()),
+        ])
     }
 }
 
