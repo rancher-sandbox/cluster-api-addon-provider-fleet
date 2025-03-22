@@ -11,8 +11,9 @@ use crate::Error;
 use futures::channel::mpsc::Sender;
 use futures::StreamExt as _;
 use k8s_openapi::api::core::v1::Namespace;
-use kube::api::{ApiResource, Object, PatchParams};
+use kube::api::{ApiResource, ListParams, Object, PatchParams};
 
+use kube::client::scope;
 use kube::core::SelectorExt as _;
 use kube::runtime::watcher::{self, Config};
 use kube::{api::ResourceExt, runtime::controller::Action, Resource};
@@ -69,7 +70,7 @@ impl TemplateSources {
         cluster.meta_mut().managed_fields = None;
 
         let mut control_plane: Object<Value, Value> = client
-            .fetch(&self.0.spec.control_plane_ref.clone()?)
+            .fetch(self.0.spec.control_plane_ref.as_ref()?)
             .await
             .ok()?;
 
@@ -77,7 +78,7 @@ impl TemplateSources {
         control_plane.meta_mut().managed_fields = None;
 
         let mut infrastructure_cluster: Object<Value, Value> = client
-            .fetch(&self.0.spec.infrastructure_ref.clone()?)
+            .fetch(self.0.spec.infrastructure_ref.as_ref()?)
             .await
             .ok()?;
 
@@ -149,6 +150,35 @@ impl FleetBundle for FleetClusterBundle {
                 .await
                 .map_err(ClusterSyncError::GroupPatchError)?;
             };
+        }
+
+        Ok(Action::await_change())
+    }
+
+    async fn cleanup(&mut self, ctx: Arc<Context>) -> Result<Action, super::SyncError> {
+        if let Some(mapping) = self.mapping.as_ref() {
+            let ns = mapping.namespace();
+            let other_clusters = ctx
+                .client
+                .list::<Cluster>(
+                    &ListParams::default(),
+                    &scope::Namespace::from(ns.clone().unwrap_or_default()),
+                )
+                .await?;
+
+            let referencing_cluster = other_clusters.iter().find(|c| {
+                c.cluster_class_namespace() == ns.as_deref()
+                    && c.name_any() != self.fleet.name_any()
+                    && c.metadata.deletion_timestamp.is_none()
+            });
+
+            if referencing_cluster.is_some() {
+                return Ok(Action::await_change());
+            }
+
+            Api::<BundleNamespaceMapping>::namespaced(ctx.client.clone(), &ns.unwrap_or_default())
+                .delete(&mapping.name_any(), &Default::default())
+                .await?;
         }
 
         Ok(Action::await_change())

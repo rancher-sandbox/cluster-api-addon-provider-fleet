@@ -269,6 +269,18 @@ pub enum Install {
     Version(String),
 }
 
+impl Install {
+    /// Perform version normalization for comparison with `helm search` app_version output
+    pub(crate) fn normalized(self) -> Self {
+        match self {
+            Install::FollowLatest(_) => self,
+            Install::Version(version) => {
+                Install::Version(version.strip_prefix("v").unwrap_or(&version).into())
+            }
+        }
+    }
+}
+
 impl Default for Install {
     fn default() -> Self {
         Self::FollowLatest(true)
