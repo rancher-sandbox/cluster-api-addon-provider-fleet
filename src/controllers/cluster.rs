@@ -13,7 +13,6 @@ use k8s_openapi::api::core::v1::Namespace;
 use kube::api::{ApiResource, ListParams, Object, PatchParams};
 
 use kube::client::scope;
-use kube::core::SelectorExt as _;
 use kube::runtime::watcher::{self, Config};
 use kube::{api::ResourceExt, runtime::controller::Action, Resource};
 use kube::{Api, Client};

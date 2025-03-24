@@ -110,27 +110,35 @@ impl State {
     }
 }
 
-fn default_handling<K: Resource<DynamicType = ()> + 'static>(
-    stream: impl Send + WatchStreamExt<Item = Result<watcher::Event<K>, watcher::Error>>,
-) -> impl Send + WatchStreamExt<Item = Result<K, watcher::Error>> {
-    stream
-        .modify(|g| g.managed_fields_mut().clear())
-        .touched_objects()
-        .predicate_filter(predicates::resource_version)
-        .default_backoff()
+trait ControllerDefault: WatchStreamExt {
+    fn default_handling<K>(self) -> impl WatchStreamExt<Item = Result<K, watcher::Error>>
+    where
+        K: Resource<DynamicType = ()> + 'static,
+        Self: Stream<Item = Result<watcher::Event<K>, watcher::Error>> + Sized,
+    {
+        self.modify(|g| g.managed_fields_mut().clear())
+            .touched_objects()
+            .predicate_filter(predicates::resource_version)
+            .default_backoff()
+    }
+
+    fn default_with_reflect<K>(
+        self,
+        writer: Writer<K>,
+    ) -> impl WatchStreamExt<Item = Result<K, watcher::Error>>
+    where
+        K: Resource<DynamicType = ()> + Clone + 'static,
+        Self: Stream<Item = Result<watcher::Event<K>, watcher::Error>> + Sized,
+    {
+        self.modify(|g| g.managed_fields_mut().clear())
+            .reflect(writer)
+            .touched_objects()
+            .predicate_filter(predicates::resource_version)
+            .default_backoff()
+    }
 }
 
-fn default_with_reflect<K: Resource<DynamicType = ()> + Clone + 'static>(
-    writer: Writer<K>,
-    stream: impl Send + WatchStreamExt<Item = Result<watcher::Event<K>, watcher::Error>>,
-) -> impl WatchStreamExt<Item = Result<K, watcher::Error>> {
-    stream
-        .modify(|g| g.managed_fields_mut().clear())
-        .reflect(writer)
-        .touched_objects()
-        .predicate_filter(predicates::resource_version)
-        .default_backoff()
-}
+impl<St: ?Sized> ControllerDefault for St where St: Stream {}
 
 pub async fn run_fleet_addon_config_controller(state: State) {
     let client = Client::try_default()
@@ -192,13 +200,11 @@ pub async fn run_fleet_helm_controller(state: State) {
         .await
         .expect("failed to create kube Client");
     let (reader, writer) = reflector::store();
-    let fleet_addon_config = default_with_reflect(
-        writer,
-        watcher(
-            Api::<FleetAddonConfig>::all(client.clone()),
-            Config::default().any_semantic(),
-        ),
+    let fleet_addon_config = watcher(
+        Api::<FleetAddonConfig>::all(client.clone()),
+        Config::default().any_semantic(),
     )
+    .default_with_reflect(writer)
     .predicate_filter(predicates::generation);
 
     let fleet_addon_config_controller = Controller::for_stream(fleet_addon_config, reader)
@@ -288,22 +294,25 @@ pub async fn run_cluster_controller(state: State) {
         .default_backoff()
         .for_each(|_| futures::future::ready(()));
 
-    let fleet = default_handling(metadata_watcher(
+    let fleet = metadata_watcher(
         Api::<fleet_cluster::Cluster>::all(client.clone()),
         Config::default().any_semantic(),
-    ));
+    )
+    .default_handling();
 
-    let groups = default_handling(metadata_watcher(
+    let groups = metadata_watcher(
         Api::<ClusterGroup>::all(client.clone()),
         Config::default()
             .labels_from(&ClusterGroup::group_selector())
             .any_semantic(),
-    ));
+    )
+    .default_handling();
 
-    let mappings = default_handling(metadata_watcher(
+    let mappings = metadata_watcher(
         Api::<BundleNamespaceMapping>::all(client.clone()),
         Config::default().any_semantic(),
-    ));
+    )
+    .default_handling();
 
     let (sub, reader) = state.dispatcher.subscribe();
     let clusters = Controller::for_shared_stream(sub, reader.clone())
@@ -353,20 +362,19 @@ pub async fn run_cluster_class_controller(state: State) {
     .for_each(|_| futures::future::ready(()));
 
     let (reader, writer) = reflector::store();
-    let cluster_classes = default_with_reflect(
-        writer,
-        watcher(
-            Api::<ClusterClass>::all(client.clone()),
-            Config::default().any_semantic(),
-        ),
-    );
+    let cluster_classes = watcher(
+        Api::<ClusterClass>::all(client.clone()),
+        Config::default().any_semantic(),
+    )
+    .default_with_reflect(writer);
 
-    let groups = default_handling(metadata_watcher(
+    let groups = metadata_watcher(
         Api::<ClusterGroup>::all(client.clone()),
         Config::default()
             .labels_from(&ClusterGroup::group_selector())
             .any_semantic(),
-    ));
+    )
+    .default_handling();
 
     let cluster_class_controller = Controller::for_stream(cluster_classes, reader)
         .owns_stream(groups)
