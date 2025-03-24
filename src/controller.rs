@@ -12,7 +12,6 @@ use crate::{Error, Metrics};
 
 use chrono::Local;
 use clap::Parser;
-use futures::channel::mpsc;
 use futures::stream::SelectAll;
 use futures::{Stream, StreamExt};
 
@@ -20,9 +19,9 @@ use k8s_openapi::api::core::v1::Namespace;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{Condition, Time};
 use kube::api::{DynamicObject, Patch, PatchParams};
 use kube::core::DeserializeGuard;
+use kube::runtime::reflector::store::Writer;
 use kube::runtime::reflector::ObjectRef;
 use kube::runtime::{metadata_watcher, predicates, reflector, watcher, WatchStreamExt};
-use kube::ResourceExt;
 use kube::{
     api::Api,
     client::Client,
@@ -31,7 +30,7 @@ use kube::{
         watcher::Config,
     },
 };
-use tokio::sync::Mutex;
+use kube::{Resource, ResourceExt};
 
 use std::collections::BTreeMap;
 use std::future;
@@ -111,6 +110,36 @@ impl State {
     }
 }
 
+trait ControllerDefault: WatchStreamExt {
+    fn default_handling<K>(self) -> impl WatchStreamExt<Item = Result<K, watcher::Error>>
+    where
+        K: Resource<DynamicType = ()> + 'static,
+        Self: Stream<Item = Result<watcher::Event<K>, watcher::Error>> + Sized,
+    {
+        self.modify(|g| g.managed_fields_mut().clear())
+            .touched_objects()
+            .predicate_filter(predicates::resource_version)
+            .default_backoff()
+    }
+
+    fn default_with_reflect<K>(
+        self,
+        writer: Writer<K>,
+    ) -> impl WatchStreamExt<Item = Result<K, watcher::Error>>
+    where
+        K: Resource<DynamicType = ()> + Clone + 'static,
+        Self: Stream<Item = Result<watcher::Event<K>, watcher::Error>> + Sized,
+    {
+        self.modify(|g| g.managed_fields_mut().clear())
+            .reflect(writer)
+            .touched_objects()
+            .predicate_filter(predicates::resource_version)
+            .default_backoff()
+    }
+}
+
+impl<St: ?Sized> ControllerDefault for St where St: Stream {}
+
 pub async fn run_fleet_addon_config_controller(state: State) {
     let client = Client::try_default()
         .await
@@ -131,6 +160,7 @@ pub async fn run_fleet_addon_config_controller(state: State) {
         error_policy,
         state.to_context(client.clone()),
     )
+    .default_backoff()
     .for_each(|_| futures::future::ready(()));
 
     let dynamic_watches_controller = Controller::new(
@@ -143,6 +173,7 @@ pub async fn run_fleet_addon_config_controller(state: State) {
         error_policy,
         state.to_context(client.clone()),
     )
+    .default_backoff()
     .for_each(|_| futures::future::ready(()));
 
     let watcher = broadcaster(state.dispatcher.clone(), state.stream.clone())
@@ -164,32 +195,19 @@ pub async fn run_fleet_addon_config_controller(state: State) {
     };
 }
 
-pub async fn run_fleet_addon_config_controller_pre_1_32(state: State) {
-    let client = Client::try_default()
-        .await
-        .expect("failed to create kube Client");
-    let api: Api<FleetAddonConfig> = Api::all(client.clone());
-    let fleet_addon_config_controller = Controller::new(api, watcher::Config::default())
-        .watches(
-            Api::<DeserializeGuard<FleetConfig>>::all(client.clone()),
-            Config::default().fields("metadata.name=fleet-controller"),
-            |config| config.0.ok().map(|_| ObjectRef::new("fleet-addon-config")),
-        )
-        .run(
-            FleetAddonConfig::reconcile_config_sync,
-            error_policy,
-            state.to_context(client.clone()),
-        )
-        .for_each(|_| futures::future::ready(()));
-    tokio::join!(fleet_addon_config_controller);
-}
-
 pub async fn run_fleet_helm_controller(state: State) {
     let client = Client::try_default()
         .await
         .expect("failed to create kube Client");
-    let api: Api<FleetAddonConfig> = Api::all(client.clone());
-    let fleet_addon_config_controller = Controller::new(api, watcher::Config::default())
+    let (reader, writer) = reflector::store();
+    let fleet_addon_config = watcher(
+        Api::<FleetAddonConfig>::all(client.clone()),
+        Config::default().any_semantic(),
+    )
+    .default_with_reflect(writer)
+    .predicate_filter(predicates::generation);
+
+    let fleet_addon_config_controller = Controller::for_stream(fleet_addon_config, reader)
         .shutdown_on_signal()
         .run(
             |obj, ctx| async move {
@@ -250,6 +268,7 @@ pub async fn run_fleet_helm_controller(state: State) {
             error_policy,
             state.to_context(client.clone()),
         )
+        .default_backoff()
         .for_each(|_| futures::future::ready(()));
     tokio::join!(fleet_addon_config_controller);
 }
@@ -272,27 +291,33 @@ pub async fn run_cluster_controller(state: State) {
             error_policy,
             state.to_context(client.clone()),
         )
+        .default_backoff()
         .for_each(|_| futures::future::ready(()));
 
     let fleet = metadata_watcher(
         Api::<fleet_cluster::Cluster>::all(client.clone()),
         Config::default().any_semantic(),
     )
-    .modify(|g| g.managed_fields_mut().clear())
-    .touched_objects()
-    .predicate_filter(predicates::resource_version);
+    .default_handling();
+
+    let groups = metadata_watcher(
+        Api::<ClusterGroup>::all(client.clone()),
+        Config::default()
+            .labels_from(&ClusterGroup::group_selector())
+            .any_semantic(),
+    )
+    .default_handling();
 
     let mappings = metadata_watcher(
         Api::<BundleNamespaceMapping>::all(client.clone()),
         Config::default().any_semantic(),
     )
-    .modify(|g| g.managed_fields_mut().clear())
-    .touched_objects()
-    .predicate_filter(predicates::resource_version);
+    .default_handling();
 
     let (sub, reader) = state.dispatcher.subscribe();
     let clusters = Controller::for_shared_stream(sub, reader.clone())
         .owns_stream(fleet)
+        .owns_stream(groups)
         .watches_stream(mappings, move |mapping| {
             reader
                 .state()
@@ -309,114 +334,7 @@ pub async fn run_cluster_controller(state: State) {
             error_policy,
             state.to_context(client.clone()),
         )
-        .for_each(|_| futures::future::ready(()));
-
-    tokio::join!(clusters, ns_controller);
-}
-
-/// Initialize the controller and shared state (given the crd is installed)
-pub async fn run_cluster_controller_pre_1_32(state: State) {
-    let client = Client::try_default()
-        .await
-        .expect("failed to create kube Client");
-
-    let config = fetch_config(client.clone())
-        .await
-        .expect("failed to get FleetAddonConfig resource");
-
-    let (reader, writer) = reflector::store();
-    let clusters = watcher(
-        Api::<Cluster>::all(client.clone()),
-        Config::default()
-            .labels_from(
-                &config
-                    .cluster_watch()
-                    .expect("valid cluster label selector"),
-            )
-            .any_semantic(),
-    )
-    .default_backoff()
-    .modify(|c| {
-        c.managed_fields_mut().clear();
-    })
-    .reflect(writer)
-    .touched_objects()
-    .predicate_filter(predicates::resource_version);
-
-    let fleet = metadata_watcher(
-        Api::<fleet_cluster::Cluster>::all(client.clone()),
-        Config::default().any_semantic(),
-    )
-    .modify(|g| g.managed_fields_mut().clear())
-    .touched_objects()
-    .predicate_filter(predicates::resource_version);
-
-    let mappings = metadata_watcher(
-        Api::<BundleNamespaceMapping>::all(client.clone()),
-        Config::default().any_semantic(),
-    )
-    .modify(|g| g.managed_fields_mut().clear())
-    .touched_objects()
-    .predicate_filter(predicates::resource_version);
-
-    let (invoke_reconcile, namespace_trigger) = mpsc::channel(0);
-    let clusters = Controller::for_stream(clusters, reader.clone())
-        .owns_stream(fleet)
-        .watches_stream(mappings, move |mapping| {
-            reader
-                .state()
-                .into_iter()
-                .filter_map(move |c: Arc<Cluster>| {
-                    let in_namespace =
-                        c.spec.topology.as_ref()?.class_namespace == mapping.namespace();
-                    in_namespace.then_some(ObjectRef::from_obj(c.deref()))
-                })
-        })
-        .reconcile_all_on(namespace_trigger)
-        .shutdown_on_signal()
-        .run(
-            Cluster::reconcile,
-            error_policy,
-            state.to_context(client.clone()),
-        )
-        .for_each(|_| futures::future::ready(()));
-
-    if config
-        .namespace_selector()
-        .expect("valid namespace selector")
-        .selects_all()
-    {
-        return clusters.await;
-    }
-
-    let (reader, writer) = reflector::store();
-    let namespaces = metadata_watcher(
-        Api::<Namespace>::all(client.clone()),
-        Config::default()
-            .labels_from(
-                &config
-                    .namespace_selector()
-                    .expect("valid namespace selector"),
-            )
-            .any_semantic(),
-    )
-    .default_backoff()
-    .modify(|ns| {
-        ns.managed_fields_mut().clear();
-        ns.annotations_mut().clear();
-        ns.labels_mut().clear();
-    })
-    .reflect(writer)
-    .touched_objects()
-    .predicate_filter(predicates::resource_version);
-
-    let ns_controller = Controller::for_stream(namespaces, reader)
-        .shutdown_on_signal()
-        .run(
-            Cluster::reconcile_ns,
-            Cluster::ns_trigger_error_policy,
-            Arc::new(Mutex::new(invoke_reconcile)),
-        )
+        .default_backoff()
         .for_each(|_| futures::future::ready(()));
 
     tokio::join!(clusters, ns_controller);
@@ -428,62 +346,48 @@ pub async fn run_cluster_class_controller(state: State) {
         .await
         .expect("failed to create kube Client");
 
-    let (reader, writer) = reflector::store_shared(1024);
-    let subscriber = writer
-        .subscribe()
-        .expect("subscribe for cluster group updates successfully");
-    let fleet_groups = watcher(
+    let group_controller = Controller::new(
         Api::<ClusterGroup>::all(client.clone()),
-        Config::default().any_semantic(),
+        Config::default()
+            .labels_from(&ClusterGroup::group_selector())
+            .any_semantic(),
+    )
+    .shutdown_on_signal()
+    .run(
+        ClusterGroup::reconcile,
+        error_policy,
+        state.to_context(client.clone()),
     )
     .default_backoff()
-    .modify(|cg| {
-        cg.managed_fields_mut().clear();
-        cg.status = None;
-    })
-    .reflect_shared(writer)
-    .touched_objects()
-    .predicate_filter(predicates::resource_version)
     .for_each(|_| futures::future::ready(()));
-
-    let group_controller = Controller::for_shared_stream(subscriber.clone(), reader)
-        .shutdown_on_signal()
-        .run(
-            ClusterGroup::reconcile,
-            error_policy,
-            state.to_context(client.clone()),
-        )
-        .for_each(|_| futures::future::ready(()));
 
     let (reader, writer) = reflector::store();
     let cluster_classes = watcher(
         Api::<ClusterClass>::all(client.clone()),
         Config::default().any_semantic(),
     )
-    .default_backoff()
-    .modify(|cc| cc.managed_fields_mut().clear())
-    .reflect(writer)
-    .touched_objects()
-    .predicate_filter(predicates::resource_version);
+    .default_with_reflect(writer);
 
-    let filtered = subscriber
-        .map(|s| Ok(s.deref().clone()))
-        .predicate_filter(crate::predicates::generation_with_deletion)
-        .filter_map(|s| future::ready(s.ok().map(Arc::new)));
+    let groups = metadata_watcher(
+        Api::<ClusterGroup>::all(client.clone()),
+        Config::default()
+            .labels_from(&ClusterGroup::group_selector())
+            .any_semantic(),
+    )
+    .default_handling();
+
     let cluster_class_controller = Controller::for_stream(cluster_classes, reader)
-        .owns_shared_stream(filtered)
+        .owns_stream(groups)
         .shutdown_on_signal()
         .run(
             ClusterClass::reconcile,
             error_policy,
             state.to_context(client.clone()),
         )
+        .default_backoff()
         .for_each(|_| futures::future::ready(()));
 
-    tokio::select! {
-        _ = fleet_groups => {},
-        _ = futures::future::join(group_controller, cluster_class_controller) => {},
-    };
+    tokio::join!(group_controller, cluster_class_controller);
 }
 
 fn error_policy(doc: Arc<impl kube::Resource>, error: &Error, ctx: Arc<Context>) -> Action {

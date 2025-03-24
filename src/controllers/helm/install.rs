@@ -1,9 +1,7 @@
-use std::{
-    fmt::Display,
-    process::{Child, Command, Stdio},
-};
+use std::{fmt::Display, process::Stdio};
 
 use serde::Deserialize;
+use tokio::process::{Child, Command};
 
 use crate::api::fleet_addon_config::Install;
 
@@ -60,7 +58,7 @@ impl Display for FleetOptions {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct ChartInfo {
     pub name: String,
     pub namespace: String,
@@ -68,7 +66,7 @@ pub struct ChartInfo {
     pub status: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct ChartSearch {
     pub name: String,
     pub app_version: String,
@@ -87,18 +85,19 @@ impl FleetChart {
             .spawn()?)
     }
 
-    pub fn search_repo(&self) -> RepoSearchResult<Vec<ChartSearch>> {
+    pub async fn search_repo(&self) -> RepoSearchResult<Vec<ChartSearch>> {
         let result = Command::new("helm")
             .stdout(Stdio::piped())
             .args(["search", "repo", "fleet", "-o", "json"])
             .spawn()?
-            .wait_with_output()?;
+            .wait_with_output()
+            .await?;
 
         let output = &String::from_utf8(result.stdout)?;
         Ok(serde_json::from_str(output)?)
     }
 
-    pub fn get_metadata(chart: &str) -> MetadataGetResult<Option<ChartInfo>> {
+    pub async fn get_metadata(chart: &str) -> MetadataGetResult<Option<ChartInfo>> {
         let mut metadata = Command::new("helm");
         metadata.args(["list", "-A", "-o", "json"]);
 
@@ -106,7 +105,7 @@ impl FleetChart {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()?;
-        let result = run.wait_with_output()?;
+        let result = run.wait_with_output().await?;
         let error = String::from_utf8(result.stderr)?;
         if result.status.code() == Some(1) && &error == "Error: release: not found" {
             return Ok(None);
