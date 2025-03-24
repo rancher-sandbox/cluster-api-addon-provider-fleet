@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use cluster_api_rs::capi_cluster::{ClusterSpec, ClusterStatus, ClusterTopology};
+use cluster_api_rs::capi_cluster::{ClusterSpec, ClusterStatus};
 use fleet_api_rs::fleet_clustergroup::{ClusterGroupSelector, ClusterGroupSpec};
 use kube::{
     api::{ObjectMeta, TypeMeta},
@@ -44,51 +44,37 @@ impl Cluster {
     pub(crate) fn to_group(self: &Cluster, config: Option<&ClusterConfig>) -> Option<ClusterGroup> {
         config?.apply_class_group().then_some(true)?;
 
-        if let cluster_api_rs::capi_cluster::ClusterSpec {
-            topology:
-                Some(ClusterTopology {
-                    class_namespace: Some(class_namespace),
-                    class,
-                    ..
-                }),
-            ..
-        } = &self.spec
-        {
-            // Cluster groups creation for cluster class namespace are handled by ClusterClass controller
-            if Some(class_namespace) == self.namespace().as_ref() {
-                return None;
-            }
+        let class = self.cluster_class_name()?;
+        // Cluster groups creation for cluster class namespace are handled by ClusterClass controller
+        let class_namespace = self.cluster_class_namespace()?;
 
-            let labels = {
-                let mut labels = BTreeMap::default();
-                labels.insert(CLUSTER_CLASS_LABEL.to_string(), class.clone());
-                labels.insert(
-                    CLUSTER_CLASS_NAMESPACE_LABEL.to_string(),
-                    class_namespace.clone(),
-                );
-                Some(labels)
-            };
+        let labels = {
+            let mut labels = BTreeMap::default();
+            labels.insert(CLUSTER_CLASS_LABEL.to_string(), class.to_string());
+            labels.insert(
+                CLUSTER_CLASS_NAMESPACE_LABEL.to_string(),
+                class_namespace.to_string(),
+            );
+            Some(labels)
+        };
 
-            return Some(ClusterGroup {
-                types: Some(TypeMeta::resource::<ClusterGroup>()),
-                metadata: ObjectMeta {
-                    name: Some(format!("{class}.{class_namespace}")),
-                    namespace: self.namespace(),
-                    labels: labels.clone(),
-                    owner_references: self.owner_ref(&()).into_iter().map(Into::into).collect(),
-                    ..Default::default()
-                },
-                spec: ClusterGroupSpec {
-                    selector: Some(ClusterGroupSelector {
-                        match_labels: labels,
-                        ..Default::default()
-                    }),
-                },
+        Some(ClusterGroup {
+            types: Some(TypeMeta::resource::<ClusterGroup>()),
+            metadata: ObjectMeta {
+                name: Some(format!("{class}.{class_namespace}")),
+                namespace: self.namespace(),
+                labels: labels.clone(),
+                owner_references: self.owner_ref(&()).into_iter().map(Into::into).collect(),
                 ..Default::default()
-            });
-        }
-
-        None
+            },
+            spec: ClusterGroupSpec {
+                selector: Some(ClusterGroupSelector {
+                    match_labels: labels,
+                    ..Default::default()
+                }),
+            },
+            ..Default::default()
+        })
     }
 
     pub(crate) fn to_cluster(
@@ -97,23 +83,19 @@ impl Cluster {
     ) -> fleet_cluster::Cluster {
         let empty = ClusterConfig::default();
         let config = config.unwrap_or(&empty);
-        let labels = match &self.spec.topology {
-            Some(ClusterTopology {
-                class,
-                class_namespace,
-                ..
-            }) if !class.is_empty() => {
-                let mut labels = self.labels().clone();
-                labels.insert(CLUSTER_CLASS_LABEL.to_string(), class.clone());
+        let class = self.cluster_class_name();
+        let ns = self.namespace().unwrap_or_default();
+        let class_namespace = self.cluster_class_namespace().unwrap_or(&ns);
+        let labels = {
+            let mut labels = self.labels().clone();
+            if let Some(class) = class {
+                labels.insert(CLUSTER_CLASS_LABEL.to_string(), class.to_string());
                 labels.insert(
                     CLUSTER_CLASS_NAMESPACE_LABEL.to_string(),
-                    class_namespace
-                        .clone()
-                        .unwrap_or(self.namespace().unwrap_or_default()),
+                    class_namespace.to_string(),
                 );
-                labels
             }
-            None | Some(ClusterTopology { .. }) => self.labels().clone(),
+            labels
         };
 
         fleet_cluster::Cluster {
@@ -209,5 +191,13 @@ impl Cluster {
             ..Default::default()
         }
         .into()
+    }
+
+    pub(crate) fn cluster_class_namespace(&self) -> Option<&str> {
+        self.spec.topology.as_ref()?.class_namespace.as_deref()
+    }
+
+    pub(crate) fn cluster_class_name(&self) -> Option<&str> {
+        Some(&self.spec.topology.as_ref()?.class)
     }
 }
