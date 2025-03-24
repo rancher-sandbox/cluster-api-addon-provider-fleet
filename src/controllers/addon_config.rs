@@ -9,16 +9,16 @@ use k8s_openapi::{
     apimachinery::pkg::apis::meta::v1::{Condition, Time},
 };
 use kube::{
-    api::{ApiResource, ObjectMeta, Patch, PatchParams, TypeMeta},
+    api::{ApiResource, DynamicObject, ObjectMeta, Patch, PatchParams, TypeMeta},
     client::scope::Namespace,
     core::object::HasSpec,
     runtime::{
         controller::Action,
-        watcher::{self, Config},
+        watcher::{self, Config, Event},
     },
     Api, Resource, ResourceExt,
 };
-use serde::{ser, Deserialize, Serialize};
+use serde::{de::DeserializeOwned, ser, Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::{serde_as, DisplayFromStr};
 use thiserror::Error;
@@ -106,7 +106,7 @@ impl FleetAddonConfig {
         };
 
         if let Some(ref mut status) = self.status {
-            chart.add_repo()?.wait()?;
+            chart.add_repo()?.wait().await?;
 
             status.conditions.push(Condition {
                 last_transition_time: Time(Local::now().to_utc()),
@@ -117,7 +117,7 @@ impl FleetAddonConfig {
                 type_: "RepoAdd".into(),
             });
 
-            chart.update_repo()?.wait()?;
+            chart.update_repo()?.wait().await?;
 
             status.conditions.push(Condition {
                 last_transition_time: Time(Local::now().to_utc()),
@@ -187,37 +187,44 @@ impl FleetAddonConfig {
         info!("Reconciling dynamic watches");
         let cluster_selector = self.cluster_selector()?;
         let ns_selector = self.namespace_selector()?;
-        let mut ns_config = Config::default().labels_from(&ns_selector);
-        let mut cluster_config = Config::default().labels_from(&cluster_selector);
+        let ns_config = Config::default().labels_from(&ns_selector);
+        let cluster_config = Config::default().labels_from(&cluster_selector);
 
         let mut stream = ctx.stream.stream.lock().await;
         stream.clear();
 
         if ctx.version >= 32 {
-            ns_config = ns_config.streaming_lists();
-            cluster_config = Config::default()
-                .labels_from(&self.cluster_watch()?)
-                .streaming_lists();
+            stream.push(
+                watcher::watcher(
+                    Api::all_with(ctx.client.clone(), &ApiResource::erase::<Cluster>(&())),
+                    cluster_config.streaming_lists(),
+                )
+                .boxed(),
+            );
+
+            stream.push(
+                watcher::watcher(
+                    Api::all_with(
+                        ctx.client.clone(),
+                        &ApiResource::erase::<v1::Namespace>(&()),
+                    ),
+                    ns_config.streaming_lists(),
+                )
+                .boxed(),
+            );
+        } else {
+            stream.push(
+                watcher::watcher(Api::<Cluster>::all(ctx.client.clone()), cluster_config)
+                    .map(to_dynamic_event)
+                    .boxed(),
+            );
+
+            stream.push(
+                watcher::watcher(Api::<v1::Namespace>::all(ctx.client.clone()), ns_config)
+                    .map(to_dynamic_event)
+                    .boxed(),
+            );
         }
-
-        stream.push(
-            watcher::watcher(
-                Api::all_with(ctx.client.clone(), &ApiResource::erase::<Cluster>(&())),
-                cluster_config,
-            )
-            .boxed(),
-        );
-
-        stream.push(
-            watcher::watcher(
-                Api::all_with(
-                    ctx.client.clone(),
-                    &ApiResource::erase::<v1::Namespace>(&()),
-                ),
-                ns_config,
-            )
-            .boxed(),
-        );
 
         info!("Reconciled dynamic watches to match selectors: namespace={ns_selector}, cluster={cluster_selector}");
         Ok(Action::await_change())
@@ -302,59 +309,67 @@ impl FleetAddonConfig {
     }
 
     async fn install_fleet(&mut self, chart: FleetChart) -> AddonConfigSyncResult<Option<Action>> {
+        let expected_version = match chart.version.as_ref() {
+            Some(version) => &version.clone().normalized(),
+            None => return Ok(None),
+        };
+
         if let Some(ref mut status) = self.status {
-            match (
-                FleetChart::get_metadata("fleet-crd")?,
-                chart
-                    .search_repo()?
-                    .into_iter()
-                    .find(|r| r.name == "fleet/fleet-crd"),
-                chart.version.clone().unwrap_or_default(),
-            ) {
+            let installed_chart_meta = FleetChart::get_metadata("fleet-crd").await?;
+            let search_result = chart
+                .search_repo()
+                .await?
+                .into_iter()
+                .find(|r| r.name == "fleet/fleet-crd");
+            match (installed_chart_meta, search_result, expected_version) {
                 (Some(installed), Some(search), Install::FollowLatest(true))
                     if search.app_version != installed.app_version =>
                 {
-                    chart.fleet_crds(&HelmOperation::Upgrade)?.wait()?;
+                    chart.fleet_crds(&HelmOperation::Upgrade)?.wait().await?;
                 }
                 (Some(installed), Some(_), Install::Version(expected))
-                    if expected != installed.app_version =>
+                    if expected.strip_prefix("v").unwrap_or(expected) != installed.app_version =>
                 {
-                    chart.fleet_crds(&HelmOperation::Upgrade)?.wait()?;
+                    chart.fleet_crds(&HelmOperation::Upgrade)?.wait().await?;
+                }
+                (None, Some(_), _) => {
+                    chart.fleet_crds(&HelmOperation::Install)?.wait().await?;
                 }
                 (Some(_), Some(_), Install::FollowLatest(false)) => {}
-                (None, Some(_), _) => {
-                    chart.fleet_crds(&HelmOperation::Install)?.wait()?;
-                }
+                (Some(_), Some(_), Install::Version(_)) => {}
                 (_, _, _) => return Ok(Some(Action::requeue(Duration::from_secs(10)))),
             };
 
+            let installed_chart_meta = FleetChart::get_metadata("fleet").await?;
+            let search_result = chart
+                .search_repo()
+                .await?
+                .into_iter()
+                .find(|r| r.name == "fleet/fleet");
+
             match (
-                FleetChart::get_metadata("fleet")?,
-                chart
-                    .search_repo()?
-                    .into_iter()
-                    .find(|r| r.name == "fleet/fleet"),
-                chart.version.clone().unwrap_or_default(),
+                installed_chart_meta,
+                search_result.as_ref(),
+                expected_version,
             ) {
                 (Some(installed), Some(search), Install::FollowLatest(true))
                     if search.app_version != installed.app_version =>
                 {
-                    chart.fleet(&HelmOperation::Upgrade)?.wait()?;
-                    status.installed_version = search.app_version.clone().into();
+                    chart.fleet(&HelmOperation::Upgrade)?.wait().await?;
                     status.conditions.push(Condition {
                         last_transition_time: Time(Local::now().to_utc()),
-                        message: format!("Updated fleet to version {}", installed.app_version),
+                        message: format!("Updated fleet to version {}", search.app_version),
                         observed_generation: self.metadata.generation,
                         reason: "Installed".into(),
                         status: "True".into(),
                         type_: "Installed".into(),
                     });
+                    status.installed_version = search.app_version.clone().into();
                 }
                 (Some(installed), Some(_), Install::Version(expected))
-                    if expected != installed.app_version =>
+                    if expected.strip_prefix("v").unwrap_or(expected) != installed.app_version =>
                 {
-                    chart.fleet(&HelmOperation::Upgrade)?.wait()?;
-                    status.installed_version = expected.clone().into();
+                    chart.fleet(&HelmOperation::Upgrade)?.wait().await?;
                     status.conditions.push(Condition {
                         last_transition_time: Time(Local::now().to_utc()),
                         message: format!("Updated fleet to version {}", expected),
@@ -363,14 +378,11 @@ impl FleetAddonConfig {
                         status: "True".into(),
                         type_: "Installed".into(),
                     });
-                }
-                (Some(installed), Some(_), Install::FollowLatest(false)) => {
-                    status.installed_version = installed.app_version.into();
+                    status.installed_version = expected.clone().into();
                 }
                 (None, Some(ChartSearch { app_version, .. }), Install::FollowLatest(_))
                 | (None, Some(_), Install::Version(app_version)) => {
-                    chart.fleet(&HelmOperation::Install)?.wait()?;
-                    status.installed_version = app_version.clone().into();
+                    chart.fleet(&HelmOperation::Install)?.wait().await?;
                     status.conditions.push(Condition {
                         last_transition_time: Time(Local::now().to_utc()),
                         message: format!("Installed fleet version {}", app_version),
@@ -379,7 +391,12 @@ impl FleetAddonConfig {
                         status: "True".into(),
                         type_: "Installed".into(),
                     });
+                    status.installed_version = app_version.clone().into();
                 }
+                (Some(installed), Some(_), Install::FollowLatest(false)) => {
+                    status.installed_version = installed.app_version.into();
+                }
+                (Some(_), Some(_), Install::Version(_)) => {}
                 (_, _, _) => return Ok(Some(Action::requeue(Duration::from_secs(10)))),
             };
         }
@@ -388,16 +405,15 @@ impl FleetAddonConfig {
     }
 
     async fn update_flags(&mut self, _: Arc<Context>) -> FleetPatchResult<Option<Action>> {
-        if FleetChart::get_metadata("fleet")?.is_none() {
+        if FleetChart::get_metadata("fleet").await?.is_none() {
             return Ok(Some(Action::requeue(Duration::from_secs(60))));
         };
 
         let feature_gates = self
             .spec
             .config
-            .clone()
-            .unwrap_or_default()
-            .feature_gates
+            .as_ref()
+            .map(|c| c.feature_gates.clone().unwrap_or_default())
             .unwrap_or_default();
 
         let options = FleetOptions {
@@ -412,7 +428,7 @@ impl FleetAddonConfig {
                 .iter()
                 .any(|c| c.type_ == "FlagsUpdate" && message == c.message)
             {
-                options.patch_fleet()?.wait()?;
+                options.patch_fleet()?.wait().await?;
 
                 status.conditions.push(Condition {
                     last_transition_time: Time(Local::now().to_utc()),
@@ -427,6 +443,35 @@ impl FleetAddonConfig {
 
         Ok(None)
     }
+}
+
+pub fn to_dynamic_event<R>(
+    ev: Result<Event<R>, watcher::Error>,
+) -> Result<Event<DynamicObject>, watcher::Error>
+where
+    R: Resource<DynamicType = ()> + Serialize + DeserializeOwned,
+{
+    let convert = |o| {
+        let value = serde_json::to_value(o)?;
+        let mut obj: DynamicObject = serde_json::from_value(value)?;
+        if obj.types.is_none() {
+            obj.types = Some(TypeMeta::resource::<R>());
+        }
+        Ok(obj)
+    };
+    let dynamic = |o| {
+        convert(o)
+            .map_err(kube::Error::SerdeError)
+            .map_err(watcher::Error::WatchFailed)
+    };
+    let ev = match ev? {
+        watcher::Event::Apply(o) => watcher::Event::Apply(dynamic(o)?),
+        watcher::Event::Delete(o) => watcher::Event::Delete(dynamic(o)?),
+        watcher::Event::InitApply(o) => watcher::Event::InitApply(dynamic(o)?),
+        watcher::Event::Init => watcher::Event::Init,
+        watcher::Event::InitDone => watcher::Event::InitDone,
+    };
+    Ok(ev)
 }
 
 pub type FleetPatchResult<T> = std::result::Result<T, FleetPatchError>;
