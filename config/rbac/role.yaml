@@ -108,3 +108,9 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - fleet.cattle.io
+  resources:
+  - bundlenamespacemappings
+  verbs:
+  - delete

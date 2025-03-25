@@ -3,7 +3,7 @@
 <div class="warning">
 
 Note: For this setup to work, you need have Fleet and Fleet CRDs charts installed
-with version >= `v0.12.0-rc.1`.
+with version >= `v0.12.0`.
 
 </div>
 
@@ -54,13 +54,7 @@ We also need to [resolve conflicts][], which happen due to in-place modification
 [previous]: ./03_installing_calico.md
 [resolve conflicts]: https://fleet.rancher.io/bundle-diffs
 
-Then we are specifying `targets.yaml` file, which will declare selection rules for this `fleet.yaml` configuration. In our case, we will match on clusters labeled with `cni: calico` label:
-
-```yaml
-{{#include ../../../fleet/applications/calico/targets.yaml}}
-```
-
-Once everything is ready, we need to apply our `GitRepo` in the `default` namespace:
+Once everything is ready, we need to apply our `GitRepo` in the `default` namespace. In our case, we will match on clusters labeled with `cni: calico` label:
 
 ```yaml
 {{#include ../../../testdata/gitrepo-calico.yaml}}
