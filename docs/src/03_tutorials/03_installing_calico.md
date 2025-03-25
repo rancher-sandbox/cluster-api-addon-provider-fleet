@@ -3,7 +3,7 @@
 <div class="warning">
 
 Note: For this setup to work, you need to install Fleet and Fleet CRDs charts via
-`FleetAddonConfig` resource. Both need to have version >= v0.12.0-rc.1,
+`FleetAddonConfig` resource. Both need to have version >= v0.12.0,
 which provides support for `HelmApp` resource.
 
 </div>
