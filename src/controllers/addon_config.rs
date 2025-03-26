@@ -423,12 +423,20 @@ impl FleetAddonConfig {
         };
         let message = format!("Updated chart flags to the expected state: {options}");
         if let Some(ref mut status) = self.status {
-            if !status
-                .conditions
-                .iter()
-                .any(|c| c.type_ == "FlagsUpdate" && message == c.message)
-            {
-                options.patch_fleet()?.wait().await?;
+            if !status.conditions.iter().any(|c| {
+                c.type_ == "FlagsUpdate"
+                    && message == c.message
+                    && c.observed_generation == self.metadata.generation
+            }) {
+                let installed_meta = match FleetChart::get_metadata("fleet").await? {
+                    Some(meta) => meta,
+                    None => return Ok(None),
+                };
+
+                options
+                    .patch_fleet(&installed_meta.app_version)?
+                    .wait()
+                    .await?;
 
                 status.conditions.push(Condition {
                     last_transition_time: Time(Local::now().to_utc()),

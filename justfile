@@ -210,6 +210,7 @@ _test-import-all:
 [private]
 _test-delete-all:
     # Verify that deleting everything causes full re-import
+    kubectl delete clustergroups.fleet.cattle.io quick-start.clusterclass --wait
     kubectl delete clustergroups.fleet.cattle.io -n clusterclass quick-start --wait
     kubectl delete bundlenamespacemappings.fleet.cattle.io -n clusterclass default --wait
     kubectl delete clusters.fleet.cattle.io capi-quickstart --wait
