@@ -76,7 +76,8 @@ where
         .map_err(GetOrCreateError::Create)?;
 
     info!("Created fleet object");
-    ctx.diagnostics
+    match ctx
+        .diagnostics
         .read()
         .await
         .recorder(ctx.client.clone())
@@ -95,7 +96,12 @@ where
             },
             &res.object_ref(&()),
         )
-        .await?;
+        .await
+    {
+        // Ignore forbidden errors on namespace deletion
+        Err(kube::Error::Api(e)) if &e.reason == "Forbidden" => (),
+        e => e?,
+    };
 
     Ok(Action::await_change())
 }
@@ -120,7 +126,8 @@ where
         .map_err(PatchError::Patch)?;
 
     info!("Updated fleet object");
-    ctx.diagnostics
+    match ctx
+        .diagnostics
         .read()
         .await
         .recorder(ctx.client.clone())
@@ -139,7 +146,12 @@ where
             },
             &res.object_ref(&()),
         )
-        .await?;
+        .await
+    {
+        // Ignore forbidden errors on namespace deletion
+        Err(kube::Error::Api(e)) if &e.reason == "Forbidden" => (),
+        e => e?,
+    };
 
     Ok(Action::await_change())
 }
@@ -193,7 +205,12 @@ where
     }
 
     async fn cleanup(&self, ctx: Arc<Context>) -> crate::Result<Action> {
-        ctx.diagnostics
+        if let Some(mut bundle) = self.to_bundle(ctx.clone()).await? {
+            return Ok(bundle.cleanup(ctx).await?);
+        }
+
+        match ctx
+            .diagnostics
             .read()
             .await
             .recorder(ctx.client.clone())
@@ -208,11 +225,12 @@ where
                 },
                 &self.object_ref(&()),
             )
-            .await?;
-
-        if let Some(mut bundle) = self.to_bundle(ctx.clone()).await? {
-            return Ok(bundle.cleanup(ctx).await?);
-        }
+            .await
+        {
+            // Ignore forbidden errors on namespace deletion
+            Err(kube::Error::Api(e)) if &e.reason == "Forbidden" => (),
+            e => e?,
+        };
 
         Ok(Action::await_change())
     }

@@ -189,7 +189,14 @@ impl FleetOptions {
     pub fn patch_fleet(&self, version: &str) -> FleetPatchResult<Child> {
         let mut upgrade = Command::new("helm");
 
-        upgrade.args(["upgrade", "fleet", "fleet/fleet", "--reuse-values", "--version", version]);
+        upgrade.args([
+            "upgrade",
+            "fleet",
+            "fleet/fleet",
+            "--reuse-values",
+            "--version",
+            version,
+        ]);
 
         if !self.namespace.is_empty() {
             upgrade.args(["--namespace", &self.namespace]);
