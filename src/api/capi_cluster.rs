@@ -1,7 +1,10 @@
 use std::collections::BTreeMap;
 
 use cluster_api_rs::capi_cluster::{ClusterSpec, ClusterStatus};
-use fleet_api_rs::{fleet_bundle_namespace_mapping::BundleNamespaceMappingNamespaceSelector, fleet_clustergroup::{ClusterGroupSelector, ClusterGroupSpec}};
+use fleet_api_rs::{
+    fleet_bundle_namespace_mapping::BundleNamespaceMappingNamespaceSelector,
+    fleet_clustergroup::{ClusterGroupSelector, ClusterGroupSpec},
+};
 use kube::{
     api::{ObjectMeta, TypeMeta},
     Resource, ResourceExt as _,
