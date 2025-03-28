@@ -15,7 +15,6 @@ use clap::Parser;
 use futures::stream::SelectAll;
 use futures::{Stream, StreamExt};
 
-use k8s_openapi::api::core::v1::Namespace;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{Condition, Time};
 use kube::api::{DynamicObject, Patch, PatchParams};
 use kube::core::DeserializeGuard;
@@ -33,7 +32,6 @@ use kube::{
 use kube::{Resource, ResourceExt};
 
 use std::collections::BTreeMap;
-use std::future;
 
 use std::ops::Deref;
 use std::pin::Pin;
@@ -280,10 +278,6 @@ pub async fn run_cluster_controller(state: State) {
         .expect("failed to create kube Client");
 
     let (sub, reader) = state.dispatcher.subscribe();
-    let sub = sub
-        .map(|n: Arc<Namespace>| Ok(n.deref().clone()))
-        .predicate_filter(predicates::labels)
-        .filter_map(|n| future::ready(n.ok().map(Arc::new)));
     let ns_controller = Controller::for_shared_stream(sub, reader)
         .shutdown_on_signal()
         .run(
