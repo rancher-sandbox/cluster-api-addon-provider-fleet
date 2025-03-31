@@ -22,7 +22,7 @@ use serde::{de::DeserializeOwned, ser, Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::{serde_as, DisplayFromStr};
 use thiserror::Error;
-use tracing::{info, instrument};
+use tracing::{field::display, info, instrument, Span};
 
 use crate::{
     api::fleet_addon_config::{FleetAddonConfig, Install, InstallOptions, Server},
@@ -93,8 +93,9 @@ struct CertData {
 }
 
 impl FleetAddonConfig {
-    #[instrument(skip_all, fields(trace_id = display(telemetry::get_trace_id()), name = self.name_any(), namespace = self.namespace()))]
+    #[instrument(skip_all, fields(reconcile_id, name = self.name_any(), namespace = self.namespace()))]
     pub async fn reconcile_helm(&mut self, ctx: Arc<Context>) -> crate::Result<Action> {
+        let _current = Span::current().record("reconcile_id", display(telemetry::get_trace_id()));
         let chart = FleetChart {
             repo: "https://rancher.github.io/fleet-helm-charts/".into(),
             namespace: "cattle-fleet-system".into(),
@@ -148,11 +149,12 @@ impl FleetAddonConfig {
         return Ok(Action::await_change());
     }
 
-    #[instrument(skip_all, fields(trace_id = display(telemetry::get_trace_id()), name = self.name_any(), namespace = self.namespace()))]
+    #[instrument(skip_all, fields(reconcile_id, name = self.name_any(), namespace = self.namespace()))]
     pub async fn reconcile_config_sync(
         self: Arc<Self>,
         ctx: Arc<Context>,
     ) -> crate::Result<Action> {
+        let _current = Span::current().record("reconcile_id", display(telemetry::get_trace_id()));
         let ns = Namespace::from("cattle-fleet-system");
         let mut fleet_config: FleetConfig = ctx.client.get("fleet-controller", &ns).await?;
 
@@ -179,7 +181,7 @@ impl FleetAddonConfig {
         Ok(Action::await_change())
     }
 
-    #[instrument(skip_all, fields(trace_id = display(telemetry::get_trace_id()), name = self.name_any(), namespace = self.namespace()))]
+    #[instrument(skip_all, fields(reconcile_id, name = self.name_any(), namespace = self.namespace()))]
     pub async fn update_watches(
         self: Arc<Self>,
         ctx: Arc<Context>,
@@ -230,11 +232,12 @@ impl FleetAddonConfig {
         Ok(Action::await_change())
     }
 
-    #[instrument(skip_all, fields(trace_id = display(telemetry::get_trace_id()), name = self.name_any(), namespace = self.namespace()))]
+    #[instrument(skip_all, fields(reconcile_id, name = self.name_any(), namespace = self.namespace()))]
     pub async fn reconcile_dynamic_watches(
         self: Arc<Self>,
         ctx: Arc<Context>,
     ) -> crate::Result<Action> {
+        let _current = Span::current().record("reconcile_id", display(telemetry::get_trace_id()));
         self.update_watches(ctx).await?;
 
         Ok(Action::await_change())

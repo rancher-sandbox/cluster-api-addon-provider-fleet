@@ -30,7 +30,7 @@ generate-addon-crds features="":
 
 # run with opentelemetry
 run-telemetry:
-    OPENTELEMETRY_ENDPOINT_URL=http://127.0.0.1:55680 RUST_LOG=info,kube=trace,controller=debug cargo run --features=telemetry
+    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://127.0.0.1:55680 RUST_LOG=info,kube=trace,controller=debug cargo run --features=telemetry
 
 # run without opentelemetry
 run:

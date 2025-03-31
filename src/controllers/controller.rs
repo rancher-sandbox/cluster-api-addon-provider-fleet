@@ -1,7 +1,7 @@
 use crate::api::fleet_addon_config::FleetAddonConfig;
 use crate::controllers::PatchError;
 use crate::metrics::Diagnostics;
-use crate::multi_dispatcher::{BroadcastStream, MultiDispatcher};
+use crate::multi_dispatcher::{typed_gvk, BroadcastStream, MultiDispatcher};
 use crate::{telemetry, Error, Metrics};
 use chrono::Utc;
 
@@ -18,12 +18,13 @@ use kube::{api::Api, client::Client, runtime::controller::Action};
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use tracing::field::display;
 
 use std::fmt::Debug;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{self, debug, info, instrument};
+use tracing::{self, debug, info, instrument, Span};
 
 use super::{
     BundleResult, ConfigFetchResult, GetOrCreateError, GetOrCreateResult, PatchResult, SyncError,
@@ -52,6 +53,7 @@ pub struct Context {
     pub version: u32,
 }
 
+#[instrument(skip_all, fields(name = res.name_any(), namespace = res.namespace(), api_version = typed_gvk::<R>(()).api_version(), kind = R::kind(&()).to_string()), err)]
 pub(crate) async fn get_or_create<R>(ctx: Arc<Context>, res: &R) -> GetOrCreateResult<Action>
 where
     R: std::fmt::Debug,
@@ -75,7 +77,7 @@ where
         .await
         .map_err(GetOrCreateError::Create)?;
 
-    info!("Created fleet object");
+    info!("Created object");
     match ctx
         .diagnostics
         .read()
@@ -106,6 +108,7 @@ where
     Ok(Action::await_change())
 }
 
+#[instrument(skip_all, fields(name = res.name_any(), namespace = res.namespace(), api_version = typed_gvk::<R>(()).api_version(), kind = R::kind(&()).to_string()), err)]
 pub(crate) async fn patch<R>(
     ctx: Arc<Context>,
     res: &mut R,
@@ -125,7 +128,7 @@ where
         .await
         .map_err(PatchError::Patch)?;
 
-    info!("Updated fleet object");
+    info!("Updated object");
     match ctx
         .diagnostics
         .read()
@@ -179,8 +182,10 @@ where
 {
     type Bundle: FleetBundle;
 
-    #[instrument(skip_all, fields(trace_id = display(telemetry::get_trace_id()), name = self.name_any(), namespace = self.namespace()), err)]
+    #[instrument(skip_all, fields(reconcile_id, name = self.name_any(), namespace = self.namespace()), err)]
     async fn reconcile(self: Arc<Self>, ctx: Arc<Context>) -> crate::Result<Action> {
+        let _current = Span::current().record("reconcile_id", display(telemetry::get_trace_id()));
+
         ctx.diagnostics.write().await.last_event = Utc::now();
 
         let namespace = self.namespace().unwrap_or_default();
