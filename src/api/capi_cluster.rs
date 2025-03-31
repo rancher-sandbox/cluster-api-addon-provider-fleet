@@ -89,6 +89,7 @@ impl Cluster {
         let class = self.cluster_class_name();
         let ns = self.namespace().unwrap_or_default();
         let class_namespace = self.cluster_class_namespace().unwrap_or(&ns);
+        let annotations = self.annotations().clone();
         let labels = {
             let mut labels = self.labels().clone();
             if let Some(class) = class {
@@ -104,6 +105,7 @@ impl Cluster {
         fleet_cluster::Cluster {
             types: Some(TypeMeta::resource::<fleet_cluster::Cluster>()),
             metadata: ObjectMeta {
+                annotations: Some(annotations),
                 labels: Some(labels),
                 owner_references: config
                     .set_owner_references
