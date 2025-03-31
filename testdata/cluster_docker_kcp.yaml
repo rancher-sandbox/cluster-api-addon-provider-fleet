@@ -9,6 +9,8 @@ spec: {}
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: Cluster
 metadata:
+  annotations:
+    example.com/annotation: test
   labels:
     import: ""
     cni: kindnet
