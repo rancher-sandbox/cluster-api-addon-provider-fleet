@@ -57,7 +57,7 @@ impl Metrics {
 
     pub fn reconcile_failure<C: kube::Resource>(&self, obj: Arc<C>, e: &Error) {
         self.failures
-            .with_label_values(&[obj.name_any().as_ref(), e.metric_label().as_ref()])
+            .with_label_values(&[obj.name_any(), e.metric_label()])
             .inc()
     }
 
@@ -106,6 +106,6 @@ impl Drop for ReconcileMeasurer {
     fn drop(&mut self) {
         #[allow(clippy::cast_precision_loss)]
         let duration = self.start.elapsed().as_millis() as f64 / 1000.0;
-        self.metric.with_label_values(&[]).observe(duration);
+        self.metric.with_label_values::<&str>(&[]).observe(duration);
     }
 }
