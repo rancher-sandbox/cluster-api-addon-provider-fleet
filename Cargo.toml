@@ -24,7 +24,7 @@ path = "src/lib.rs"
 [features]
 default = []
 agent-initiated = ["default"]
-telemetry = ["tonic", "opentelemetry-otlp"]
+telemetry = []
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -50,11 +50,10 @@ prometheus = "0.14.0"
 chrono = { version = "0.4.40", features = ["serde"] }
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.19", features = ["json", "env-filter"] }
-tracing-opentelemetry = "0.28.0"
-opentelemetry = { version = "0.27.1", features = ["trace"] }
-opentelemetry-otlp = { version = "0.29.0", optional = true }
-opentelemetry_sdk = { version = "0.29.0", features = ["rt-tokio"] }
-tonic = { version = "0.13.0", optional = true }
+tracing-opentelemetry = "0.30.0"
+opentelemetry = { version = "0.29.0" }
+opentelemetry-otlp = { version = "0.29.0", features = ["grpc-tonic", "logs"]}
+opentelemetry_sdk = { version = "0.29.0" }
 thiserror = "2.0.11"
 anyhow = "1.0.96"
 base64 = "0.22.1"

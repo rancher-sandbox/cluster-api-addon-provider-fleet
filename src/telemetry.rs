@@ -13,38 +13,24 @@ pub fn get_trace_id() -> TraceId {
         .trace_id()
 }
 
-#[cfg(feature = "telemetry")]
-async fn init_tracer() -> opentelemetry::sdk::trace::Tracer {
-    let otlp_endpoint = std::env::var("OPENTELEMETRY_ENDPOINT_URL")
-        .expect("Need a otel tracing collector configured");
+async fn init_tracer() -> opentelemetry_sdk::trace::Tracer {
+    use opentelemetry::trace::TracerProvider;
+    #[cfg(feature = "telemetry")]
+    use opentelemetry_otlp::SpanExporter;
+    use opentelemetry_sdk::trace::SdkTracerProvider;
 
-    let channel = tonic::transport::Channel::from_shared(otlp_endpoint)
-        .unwrap()
-        .connect()
-        .await
-        .unwrap();
-
-    opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_channel(channel),
-        )
-        .with_trace_config(opentelemetry::sdk::trace::config().with_resource(
-            opentelemetry::sdk::Resource::new(vec![opentelemetry::KeyValue::new(
-                "service.name",
-                "doc-controller",
-            )]),
-        ))
-        .install_batch(opentelemetry::runtime::Tokio)
-        .unwrap()
+    #[cfg(feature = "telemetry")]
+    let exporter = SpanExporter::builder().with_tonic().build().unwrap();
+    let builder = SdkTracerProvider::builder();
+    #[cfg(feature = "telemetry")]
+    let builder = builder.with_batch_exporter(exporter);
+    builder.build()
+        .tracer("addon-provider-fleet")
 }
 
 /// Initialize tracing
 pub async fn init() {
     // Setup tracing layers
-    #[cfg(feature = "telemetry")]
     let telemetry = tracing_opentelemetry::layer().with_tracer(init_tracer().await);
     let logger = tracing_subscriber::fmt::layer().compact();
     let env_filter = EnvFilter::try_from_default_env()
@@ -52,13 +38,10 @@ pub async fn init() {
         .unwrap();
 
     // Decide on layers
-    #[cfg(feature = "telemetry")]
     let collector = Registry::default()
         .with(telemetry)
         .with(logger)
         .with(env_filter);
-    #[cfg(not(feature = "telemetry"))]
-    let collector = Registry::default().with(logger).with(env_filter);
 
     // Initialize tracing
     tracing::subscriber::set_global_default(collector).unwrap();
@@ -67,8 +50,7 @@ pub async fn init() {
 #[cfg(test)]
 mod test {
     // This test only works when telemetry is initialized fully
-    // and requires OPENTELEMETRY_ENDPOINT_URL pointing to a valid server
-    #[cfg(feature = "telemetry")]
+    // and requires OTEL_EXPORTER_OTLP_LOGS_ENDPOINT pointing to a valid server
     #[tokio::test]
     #[ignore = "requires a trace exporter"]
     async fn get_trace_id_returns_valid_traces() {
