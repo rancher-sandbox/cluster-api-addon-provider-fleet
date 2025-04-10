@@ -1,6 +1,8 @@
+use std::collections::BTreeMap;
+
 use fleet_api_rs::fleet_cluster::{ClusterAgentEnvVars, ClusterAgentTolerations};
 use k8s_openapi::{
-    api::core::v1::ObjectReference,
+    api::core::v1::{ConfigMap, ObjectReference},
     apimachinery::pkg::apis::meta::v1::{Condition, LabelSelector},
 };
 use kube::{
@@ -9,8 +11,11 @@ use kube::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_yaml::{Value, Error};
 
 pub const AGENT_NAMESPACE: &str = "fleet-addon-agent";
+pub const EXPERIMENTAL_OCI_STORAGE: &str = "EXPERIMENTAL_OCI_STORAGE";
+pub const EXPERIMENTAL_HELM_OPS: &str = "EXPERIMENTAL_HELM_OPS";
 
 /// This provides a config for fleet addon functionality
 #[derive(CustomResource, Deserialize, Serialize, Clone, Default, Debug, CELSchema)]
@@ -239,6 +244,61 @@ pub struct FeatureGates {
 
     /// Enables experimental Helm operations support.
     pub experimental_helm_ops: bool,
+
+    // Enables syncing of feature gates to a ConfigMap.
+    pub config_map: Option<FeaturesConfigMap>,
+}
+
+impl FeatureGates {
+    /// Returns true if a ConfigMap reference is defined.
+    pub(crate) fn has_config_map_ref(&self) -> bool {
+        self.config_map.as_ref().and_then(|c | c.reference.as_ref()).is_some()
+    }
+
+    /// Syncs the `fleet` data key on the ConfigMap with FeatureGates
+    pub(crate) fn sync_configmap(&self, config_map: &mut ConfigMap) -> Result<(), Error> {
+        let mut empty_data: BTreeMap<String,String> = BTreeMap::new();
+        let data = config_map.data.as_mut().unwrap_or(&mut empty_data);
+        match data.get("fleet") {
+            Some(fleet_data) => {
+                data.insert(String::from("fleet"), self.merge_features(Some(fleet_data))?);
+            }
+            None => {
+                data.insert(String::from("fleet"), self.merge_features(None)?);
+            }
+        }
+        config_map.data = Some(data.clone());
+        Ok(())
+    }
+
+    /// Merge the feature gates environment variables with a provided optional input.
+    fn merge_features(&self, input: Option<&String>) -> Result<String, Error>  {
+        let mut extra_env_map: BTreeMap<String, String> = BTreeMap::new();
+        let mut values = FleetChartValues {
+            ..Default::default()
+        };
+
+        if let Some(input) = input {
+            values = serde_yaml::from_str(input)?;
+            // If there are existing extraEnv entries, convert them to a map.
+            if let Some(extra_env) = values.extra_env {
+                extra_env_map = extra_env.into_iter().map(|var| (var.name.unwrap_or_default(), var.value.unwrap_or_default())).collect();
+            }
+        }
+
+        // Sync the feature flags to the map.
+        extra_env_map.insert(String::from(EXPERIMENTAL_HELM_OPS), self.experimental_helm_ops.to_string());
+        extra_env_map.insert(String::from(EXPERIMENTAL_OCI_STORAGE), self.experimental_oci_storage.to_string());
+
+        // Convert the map back to list.
+        values.extra_env = Some(extra_env_map.iter()
+            .map(|(key, value)|
+            EnvironmentVariable{name: Some(key.clone()), value: Some(value.clone())})
+            .collect());
+
+        //Return the serialized updated values.
+       serde_yaml::to_string(&values)
+    }
 }
 
 impl Default for FeatureGates {
@@ -247,8 +307,36 @@ impl Default for FeatureGates {
             // Unless is set otherwise, these features are enabled by CAAPF
             experimental_oci_storage: true,
             experimental_helm_ops: true,
+            config_map: None,
         }
     }
+}
+
+/// FeaturesConfigMap references a ConfigMap where to apply feature flags.
+/// If a ConfigMap is referenced, the controller will update it instead of upgrading the Fleet chart.
+#[derive(Clone, Default, Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FeaturesConfigMap {
+    // The reference to a ConfigMap resource
+    #[serde(rename = "ref")]
+    pub reference: Option<ObjectReference>,
+}
+
+/// FleetChartValues represents Fleet chart values.
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FleetChartValues {
+    pub extra_env: Option<Vec<EnvironmentVariable>>,
+    #[serde(flatten)]
+    pub other: Value
+}
+
+/// EnvironmentVariable is a simple name/value pair.
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnvironmentVariable {
+    pub name: Option<String>,
+    pub value: Option<String>
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
@@ -381,7 +469,11 @@ impl FleetAddonConfig {
 
 #[cfg(test)]
 mod tests {
-    use crate::api::fleet_addon_config::NamingStrategy;
+    use std::collections::BTreeMap;
+
+    use k8s_openapi::api::core::v1::ConfigMap;
+
+    use crate::api::fleet_addon_config::{FeatureGates, NamingStrategy};
 
     #[tokio::test]
     async fn test_naming_strategy() {
@@ -429,4 +521,72 @@ mod tests {
             .apply(None)
         );
     }
+
+    #[tokio::test]
+    async fn test_sync_config_map() {
+        let want_fleet_data = r#"extraEnv:
+- name: EXPERIMENTAL_HELM_OPS
+  value: 'true'
+- name: EXPERIMENTAL_OCI_STORAGE
+  value: 'true'
+- name: foo
+  value: bar
+foo:
+  bar: foobar
+"#;
+        let fleet_data = r#"foo:
+  bar: foobar
+extraEnv:
+- name: foo
+  value: bar
+- name: EXPERIMENTAL_OCI_STORAGE
+  value: "false"
+- name: EXPERIMENTAL_HELM_OPS
+  value: "false"
+"#;
+        let mut data: BTreeMap<String, String> = BTreeMap::new();
+        data.insert(String::from("fleet"), String::from(fleet_data));
+        let mut config_map = ConfigMap {
+            data: Some(data),
+            ..Default::default()
+        };
+        let feature_gates = FeatureGates {
+            experimental_oci_storage: true,
+            experimental_helm_ops: true,
+            config_map: None
+        };
+        let _ = feature_gates.sync_configmap(&mut config_map);
+        
+        let synced_fleet_data = config_map.data.as_ref().and_then(|d | d.get("fleet")).unwrap();
+        assert_eq!(
+            want_fleet_data.to_string(),
+            synced_fleet_data.clone()
+        )
+    }
+
+    #[tokio::test]
+    async fn test_sync_empty_config_map() {
+        let want_fleet_data = r#"extraEnv:
+- name: EXPERIMENTAL_HELM_OPS
+  value: 'false'
+- name: EXPERIMENTAL_OCI_STORAGE
+  value: 'false'
+"#;
+        let mut config_map = ConfigMap {
+            data: None,
+            ..Default::default()
+        };
+        let feature_gates = FeatureGates {
+            experimental_oci_storage: false,
+            experimental_helm_ops: false,
+            config_map: None
+        };
+        let _ = feature_gates.sync_configmap(&mut config_map);
+        
+        let synced_fleet_data = config_map.data.as_ref().and_then(|d | d.get("fleet")).unwrap();
+        assert_eq!(
+            want_fleet_data.to_string(),
+            synced_fleet_data.clone()
+        )
+    }    
 }
