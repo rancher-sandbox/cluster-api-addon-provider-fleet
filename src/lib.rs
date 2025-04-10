@@ -1,7 +1,7 @@
 use std::io;
 
 use controllers::{
-    addon_config::{AddonConfigSyncError, DynamicWatcherError, FleetPatchError},
+    addon_config::{AddonConfigSyncError, DynamicWatcherError, FleetPatchError, ConfigMapSyncError},
     helm, BundleError, SyncError,
 };
 use futures::channel::mpsc::TrySendError;
@@ -49,6 +49,9 @@ pub enum Error {
 
     #[error("IllegalDocument")]
     IllegalDocument,
+
+    #[error("ConfigMap sync error: {0}")]
+    ConfigMapSyncError(#[from] ConfigMapSyncError),
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;

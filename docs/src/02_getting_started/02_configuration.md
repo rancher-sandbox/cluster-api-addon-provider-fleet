@@ -101,3 +101,24 @@ spec:
 
 **By default, if the `featureGates` field is not present, these feature gates are *enabled*. To disable these need to explicitly be set to `false`.**
 
+Optionally, the `featureGates` flags can be synced to a `ConfigMap` object.  
+This is useful when Fleet is installed and managed by Rancher.  
+When a `ConfigMap` reference is defined, the controller will just sync the `featureGates` to it, without making any changes to the Fleet helm chart.  
+
+```yaml
+apiVersion: addons.cluster.x-k8s.io/v1alpha1
+kind: FleetAddonConfig
+metadata:
+  name: fleet-addon-config
+spec:
+  config:
+    featureGates:
+      experimentalOciStorage: true   # Enables experimental OCI storage support
+      experimentalHelmOps: true      # Enables experimental Helm operations support
+      configMap:
+        ref:
+          apiVersion: v1
+          kind: ConfigMap
+          name: rancher-config
+          namespace: cattle-system
+```

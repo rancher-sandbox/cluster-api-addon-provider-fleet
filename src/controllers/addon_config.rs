@@ -30,11 +30,11 @@ use crate::{
 };
 
 use super::{
-    controller::Context,
+    controller::{patch, Context},
     helm::{
         self,
         install::{ChartSearch, FleetChart, FleetOptions, HelmOperation},
-    },
+    }, GetOrCreateError, PatchError,
 };
 
 #[derive(Resource, Serialize, Deserialize, Default, Clone, Debug)]
@@ -96,6 +96,13 @@ impl FleetAddonConfig {
     #[instrument(skip_all, fields(reconcile_id, name = self.name_any(), namespace = self.namespace()))]
     pub async fn reconcile_helm(&mut self, ctx: Arc<Context>) -> crate::Result<Action> {
         let _current = Span::current().record("reconcile_id", display(telemetry::get_trace_id()));
+        if let Some(feature_gates) = self.spec.config.as_ref().and_then(|c | c.feature_gates.as_ref()) {
+            if feature_gates.has_config_map_ref() {
+                self.update_config_map(ctx.clone()).await?;
+                return Ok(Action::await_change())
+            }
+        }
+
         let chart = FleetChart {
             repo: "https://rancher.github.io/fleet-helm-charts/".into(),
             namespace: "cattle-fleet-system".into(),
@@ -454,6 +461,29 @@ impl FleetAddonConfig {
 
         Ok(None)
     }
+
+    async fn update_config_map(&self, ctx: Arc<Context>) -> ConfigMapSyncResult<()> {
+        let feature_gates = self
+            .spec
+            .config
+            .as_ref()
+            .map(|c| c.feature_gates.clone().unwrap_or_default())
+            .unwrap_or_default();
+
+        if let Some(reference) = feature_gates.config_map.as_ref()
+            .and_then(|c |c.reference.as_ref()) {
+            let mut config_map: ConfigMap = ctx.client.fetch(reference).await?;
+            feature_gates.sync_configmap(&mut config_map)?;
+            patch(
+                ctx,
+                &mut config_map,
+                &PatchParams::apply("addon-provider-fleet").force(),
+            )
+            .await?;
+        }
+
+        Ok(())
+    }
 }
 
 pub fn to_dynamic_event<R>(
@@ -531,6 +561,23 @@ pub type DynamicWatcherResult<T> = std::result::Result<T, DynamicWatcherError>;
 pub enum DynamicWatcherError {
     #[error("Invalid selector encountered: {0}")]
     SelectorParseError(#[from] kube::core::ParseExpressionError),
+}
+
+pub type ConfigMapSyncResult<T> = std::result::Result<T, ConfigMapSyncError>;
+
+#[derive(Error, Debug)]
+pub enum ConfigMapSyncError {
+    #[error("ConfigMap fetch error: {0}")]
+    FetchConfigMap(#[from] kube::Error),
+
+    #[error("ConfigMap get or create error: {0}")]
+    GetOrCreate(#[from] GetOrCreateError),
+
+    #[error("ConfigMap patch error: {0}")]
+    Patch(#[from] PatchError),
+
+    #[error("ConfigMap serialization error: {0}")]
+    Serialize(#[from] serde_yaml::Error),
 }
 
 mod tests {

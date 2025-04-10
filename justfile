@@ -153,6 +153,7 @@ deploy features="": _download-kustomize
     just generate {{features}}
     just build-and-load
     kustomize build config/default | kubectl apply -f -
+    kubectl -n caapf-system rollout restart deployment/caapf-controller-manager
     kubectl --context kind-dev apply -f testdata/config.yaml
     kubectl wait fleetaddonconfigs fleet-addon-config --timeout=150s --for=condition=Ready=true
 
