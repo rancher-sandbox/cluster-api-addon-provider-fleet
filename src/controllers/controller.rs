@@ -32,7 +32,7 @@ use super::{
 
 pub static FLEET_FINALIZER: &str = "fleet.addons.cluster.x-k8s.io";
 
-type DynamicStream = SelectAll<
+pub(crate) type DynamicStream = SelectAll<
     Pin<Box<dyn Stream<Item = Result<watcher::Event<DynamicObject>, watcher::Error>> + Send>>,
 >;
 

@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{fmt::Display, str::FromStr};
 
 use fleet_api_rs::fleet_cluster::{ClusterAgentEnvVars, ClusterAgentTolerations};
 use k8s_openapi::{
@@ -6,12 +6,14 @@ use k8s_openapi::{
     apimachinery::pkg::apis::meta::v1::{Condition, LabelSelector},
 };
 use kube::{
+    api::{ObjectMeta, TypeMeta},
     core::{ParseExpressionError, Selector},
-    CELSchema, CustomResource,
+    CELSchema, CustomResource, Resource,
 };
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
-use serde_yaml::{Value, Error};
+use serde::{ser, Deserialize, Serialize};
+use serde_with::{serde_as, DisplayFromStr};
+use serde_yaml::Value;
 
 pub const AGENT_NAMESPACE: &str = "fleet-addon-agent";
 pub const EXPERIMENTAL_OCI_STORAGE: &str = "EXPERIMENTAL_OCI_STORAGE";
@@ -141,6 +143,46 @@ pub struct ClusterConfig {
     pub agent_initiated: Option<bool>,
 }
 
+#[derive(Resource, Serialize, Deserialize, Default, Clone, Debug)]
+#[resource(inherit = ConfigMap)]
+pub struct FleetSettings {
+    #[serde(flatten, default)]
+    pub types: Option<TypeMeta>,
+    pub metadata: ObjectMeta,
+    pub data: Option<FleetSettingsSpec>,
+}
+
+#[serde_as]
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+pub struct FleetSettingsSpec {
+    #[serde_as(as = "DisplayFromStr")]
+    pub fleet: FleetChartValues,
+
+    #[serde(flatten)]
+    pub other: Value,
+}
+
+impl FromStr for FleetChartValues {
+    type Err = serde_yaml::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_yaml::from_str(s)
+    }
+}
+
+impl Display for FleetChartValues {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&serde_yaml::to_string(self).map_err(ser::Error::custom)?)
+    }
+}
+
+impl FleetAddonConfigSpec {
+    /// Returns reference to FeatureGates if defined.
+    pub(crate) fn feature_gates(&self) -> Option<&FeatureGates> {
+        self.config.as_ref()?.feature_gates.as_ref()
+    }
+}
+
 impl ClusterConfig {
     pub(crate) fn agent_install_namespace(&self) -> String {
         self.agent_namespace
@@ -249,55 +291,47 @@ pub struct FeatureGates {
     pub config_map: Option<FeaturesConfigMap>,
 }
 
-impl FeatureGates {
-    /// Returns true if a ConfigMap reference is defined.
-    pub(crate) fn has_config_map_ref(&self) -> bool {
-        self.config_map.as_ref().and_then(|c | c.reference.as_ref()).is_some()
+impl Display for FeatureGates {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let oci = self.experimental_oci_storage;
+        let helm_ops = self.experimental_helm_ops;
+        let config_map = self.config_map_ref();
+        f.write_str(&format!("ref={config_map:#?}, oci={oci}, helm={helm_ops}"))
     }
+}
 
-    /// Syncs the `fleet` data key on the ConfigMap with FeatureGates
-    pub(crate) fn sync_configmap(&self, config_map: &mut ConfigMap) -> Result<(), Error> {
-        let mut empty_data: BTreeMap<String,String> = BTreeMap::new();
-        let data = config_map.data.as_mut().unwrap_or(&mut empty_data);
-        match data.get("fleet") {
-            Some(fleet_data) => {
-                data.insert(String::from("fleet"), self.merge_features(Some(fleet_data))?);
-            }
-            None => {
-                data.insert(String::from("fleet"), self.merge_features(None)?);
-            }
-        }
-        config_map.data = Some(data.clone());
-        Ok(())
+impl FeatureGates {
+    /// Returns reference to a ConfigMap if defined.
+    pub(crate) fn config_map_ref(&self) -> Option<&ObjectReference> {
+        self.config_map.as_ref()?.reference.as_ref()
     }
 
     /// Merge the feature gates environment variables with a provided optional input.
-    fn merge_features(&self, input: Option<&String>) -> Result<String, Error>  {
-        let mut extra_env_map: BTreeMap<String, String> = BTreeMap::new();
-        let mut values = FleetChartValues {
-            ..Default::default()
+    pub(crate) fn merge_features(&self, settings: &mut FleetSettingsSpec) {
+        // Sync the feature flags to the map.
+        let env_map = settings.fleet.extra_env.get_or_insert_default();
+
+        match env_map
+            .iter_mut()
+            .find(|env| env.name == EXPERIMENTAL_HELM_OPS)
+        {
+            Some(helm_ops) => helm_ops.value = self.experimental_helm_ops.to_string(),
+            None => env_map.push(EnvironmentVariable {
+                name: EXPERIMENTAL_HELM_OPS.to_string(),
+                value: self.experimental_helm_ops.to_string(),
+            }),
         };
 
-        if let Some(input) = input {
-            values = serde_yaml::from_str(input)?;
-            // If there are existing extraEnv entries, convert them to a map.
-            if let Some(extra_env) = values.extra_env {
-                extra_env_map = extra_env.into_iter().map(|var| (var.name.unwrap_or_default(), var.value.unwrap_or_default())).collect();
-            }
-        }
-
-        // Sync the feature flags to the map.
-        extra_env_map.insert(String::from(EXPERIMENTAL_HELM_OPS), self.experimental_helm_ops.to_string());
-        extra_env_map.insert(String::from(EXPERIMENTAL_OCI_STORAGE), self.experimental_oci_storage.to_string());
-
-        // Convert the map back to list.
-        values.extra_env = Some(extra_env_map.iter()
-            .map(|(key, value)|
-            EnvironmentVariable{name: Some(key.clone()), value: Some(value.clone())})
-            .collect());
-
-        //Return the serialized updated values.
-       serde_yaml::to_string(&values)
+        match env_map
+            .iter_mut()
+            .find(|env| env.name == EXPERIMENTAL_OCI_STORAGE)
+        {
+            Some(helm_ops) => helm_ops.value = self.experimental_oci_storage.to_string(),
+            None => env_map.push(EnvironmentVariable {
+                name: EXPERIMENTAL_OCI_STORAGE.to_string(),
+                value: self.experimental_oci_storage.to_string(),
+            }),
+        };
     }
 }
 
@@ -328,15 +362,15 @@ pub struct FeaturesConfigMap {
 pub struct FleetChartValues {
     pub extra_env: Option<Vec<EnvironmentVariable>>,
     #[serde(flatten)]
-    pub other: Value
+    pub other: Value,
 }
 
 /// EnvironmentVariable is a simple name/value pair.
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EnvironmentVariable {
-    pub name: Option<String>,
-    pub value: Option<String>
+    pub name: String,
+    pub value: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
@@ -469,11 +503,11 @@ impl FleetAddonConfig {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::str::FromStr;
 
-    use k8s_openapi::api::core::v1::ConfigMap;
-
-    use crate::api::fleet_addon_config::{FeatureGates, NamingStrategy};
+    use crate::api::fleet_addon_config::{
+        FeatureGates, FleetChartValues, FleetSettingsSpec, NamingStrategy,
+    };
 
     #[tokio::test]
     async fn test_naming_strategy() {
@@ -527,41 +561,30 @@ mod tests {
         let want_fleet_data = r#"extraEnv:
 - name: EXPERIMENTAL_HELM_OPS
   value: 'true'
+- name: foo
+  value: bar
 - name: EXPERIMENTAL_OCI_STORAGE
   value: 'true'
+foo:
+  bar: foobar
+"#;
+        let fleet_data = r#"extraEnv:
+- name: EXPERIMENTAL_HELM_OPS
+  value: "false"
 - name: foo
   value: bar
 foo:
   bar: foobar
 "#;
-        let fleet_data = r#"foo:
-  bar: foobar
-extraEnv:
-- name: foo
-  value: bar
-- name: EXPERIMENTAL_OCI_STORAGE
-  value: "false"
-- name: EXPERIMENTAL_HELM_OPS
-  value: "false"
-"#;
-        let mut data: BTreeMap<String, String> = BTreeMap::new();
-        data.insert(String::from("fleet"), String::from(fleet_data));
-        let mut config_map = ConfigMap {
-            data: Some(data),
+        let mut data = FleetSettingsSpec {
+            fleet: FleetChartValues::from_str(fleet_data).unwrap(),
             ..Default::default()
         };
-        let feature_gates = FeatureGates {
-            experimental_oci_storage: true,
-            experimental_helm_ops: true,
-            config_map: None
-        };
-        let _ = feature_gates.sync_configmap(&mut config_map);
-        
-        let synced_fleet_data = config_map.data.as_ref().and_then(|d | d.get("fleet")).unwrap();
-        assert_eq!(
-            want_fleet_data.to_string(),
-            synced_fleet_data.clone()
-        )
+        let feature_gates = FeatureGates::default();
+
+        feature_gates.merge_features(&mut data);
+
+        assert_eq!(want_fleet_data.to_string(), data.fleet.to_string())
     }
 
     #[tokio::test]
@@ -572,21 +595,15 @@ extraEnv:
 - name: EXPERIMENTAL_OCI_STORAGE
   value: 'false'
 "#;
-        let mut config_map = ConfigMap {
-            data: None,
-            ..Default::default()
-        };
+        let mut data = FleetSettingsSpec::default();
         let feature_gates = FeatureGates {
             experimental_oci_storage: false,
             experimental_helm_ops: false,
-            config_map: None
+            config_map: None,
         };
-        let _ = feature_gates.sync_configmap(&mut config_map);
-        
-        let synced_fleet_data = config_map.data.as_ref().and_then(|d | d.get("fleet")).unwrap();
-        assert_eq!(
-            want_fleet_data.to_string(),
-            synced_fleet_data.clone()
-        )
-    }    
+
+        feature_gates.merge_features(&mut data);
+
+        assert_eq!(want_fleet_data.to_string(), data.fleet.to_string())
+    }
 }
