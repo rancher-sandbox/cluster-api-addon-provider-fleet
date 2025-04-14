@@ -5,18 +5,17 @@ use crate::api::fleet_addon_config::FleetAddonConfig;
 use crate::api::fleet_cluster;
 use crate::api::fleet_clustergroup::ClusterGroup;
 use crate::controllers::addon_config::FleetConfig;
-use crate::controllers::controller::{fetch_config, Context, FleetController};
+use crate::controllers::controller::{fetch_config, Context, DynamicStream, FleetController};
 use crate::metrics::Diagnostics;
 use crate::multi_dispatcher::{broadcaster, BroadcastStream, MultiDispatcher};
 use crate::{Error, Metrics};
 
 use chrono::Local;
 use clap::Parser;
-use futures::stream::SelectAll;
 use futures::{Stream, StreamExt};
 
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{Condition, Time};
-use kube::api::{DynamicObject, Patch, PatchParams};
+use kube::api::{Patch, PatchParams};
 use kube::core::DeserializeGuard;
 use kube::runtime::reflector::store::Writer;
 use kube::runtime::reflector::ObjectRef;
@@ -34,14 +33,9 @@ use kube::{Resource, ResourceExt};
 use std::collections::BTreeMap;
 
 use std::ops::Deref;
-use std::pin::Pin;
 use std::sync::Arc;
 use tokio::{sync::RwLock, time::Duration};
 use tracing::{self, warn};
-
-type DynamicStream = SelectAll<
-    Pin<Box<dyn Stream<Item = Result<watcher::Event<DynamicObject>, watcher::Error>> + Send>>,
->;
 
 /// State shared between the controller and the web server
 #[derive(Clone)]
@@ -211,42 +205,41 @@ pub async fn run_fleet_helm_controller(state: State) {
             |obj, ctx| async move {
                 let mut obj = obj.deref().clone();
                 obj.metadata.managed_fields = None;
-                obj.status = Some(obj.status.clone().unwrap_or_default());
                 let res = FleetAddonConfig::reconcile_helm(&mut obj, ctx.clone()).await;
-                if let Some(ref mut status) = obj.status {
-                    let conditions = &mut status.conditions;
-                    let mut message = "Addon provider is ready".to_string();
-                    let mut status = "True";
-                    if let Err(ref e) = res {
-                        message = format!("FleetAddonConfig reconcile error: {e}");
-                        status = "False";
-                    }
-                    conditions.push(Condition {
-                        last_transition_time: Time(Local::now().to_utc()),
-                        message,
-                        observed_generation: obj.metadata.generation,
-                        reason: "Ready".into(),
-                        status: status.into(),
-                        type_: "Ready".into(),
+                let status = obj.status.get_or_insert_default();
+                let conditions = &mut status.conditions;
+                let mut message = "Addon provider is ready".to_string();
+                let mut status_message = "True";
+                if let Err(ref e) = res {
+                    message = format!("FleetAddonConfig reconcile error: {e}");
+                    status_message = "False";
+                }
+                conditions.push(Condition {
+                    last_transition_time: Time(Local::now().to_utc()),
+                    message,
+                    observed_generation: obj.metadata.generation,
+                    reason: "Ready".into(),
+                    status: status_message.into(),
+                    type_: "Ready".into(),
+                });
+
+                let status = obj.status.get_or_insert_default();
+                let mut uniques: BTreeMap<String, Condition> = BTreeMap::new();
+                status
+                    .conditions
+                    .iter()
+                    .for_each(|e| match uniques.get(&e.type_) {
+                        Some(existing)
+                            if existing.message == e.message
+                                && existing.reason == e.reason
+                                && existing.status == e.status
+                                && existing.observed_generation == e.observed_generation => {}
+                        _ => {
+                            uniques.insert(e.type_.clone(), e.clone());
+                        }
                     });
-                }
-                if let Some(ref mut status) = obj.status {
-                    let mut uniques: BTreeMap<String, Condition> = BTreeMap::new();
-                    status
-                        .conditions
-                        .iter()
-                        .for_each(|e| match uniques.get(&e.type_) {
-                            Some(existing)
-                                if existing.message == e.message
-                                    && existing.reason == e.reason
-                                    && existing.status == e.status
-                                    && existing.observed_generation == e.observed_generation => {}
-                            _ => {
-                                uniques.insert(e.type_.clone(), e.clone());
-                            }
-                        });
-                    status.conditions = uniques.into_values().collect();
-                }
+                status.conditions = uniques.into_values().collect();
+
                 let api: Api<FleetAddonConfig> = Api::all(ctx.client.clone());
                 let patch = api
                     .patch_status(

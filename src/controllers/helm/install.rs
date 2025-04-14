@@ -3,11 +3,11 @@ use std::{fmt::Display, process::Stdio};
 use serde::Deserialize;
 use tokio::process::{Child, Command};
 
-use crate::api::fleet_addon_config::Install;
+use crate::api::fleet_addon_config::{FeatureGates, Install};
 
 use super::{
-    FleetCRDInstallResult, FleetInstallResult, FleetPatchResult, MetadataGetResult, RepoAddResult,
-    RepoSearchResult, RepoUpdateResult,
+    FleetCRDInstallResult, FleetInstallResult, MetadataGetResult, RepoAddResult, RepoSearchResult,
+    RepoUpdateResult,
 };
 
 #[derive(Default, Clone)]
@@ -21,6 +21,8 @@ pub struct FleetChart {
     pub create_namespace: bool,
 
     pub bootstrap_local_cluster: bool,
+
+    pub feature_gates: FeatureGates,
 }
 
 #[derive(PartialEq)]
@@ -35,26 +37,6 @@ impl Display for HelmOperation {
             HelmOperation::Install => f.write_str("install"),
             HelmOperation::Upgrade => f.write_str("upgrade"),
         }
-    }
-}
-
-#[derive(Default, Clone)]
-pub struct FleetOptions {
-    pub namespace: String,
-    pub experimental_oci_storage: bool,
-    pub experimental_helm_ops: bool,
-}
-
-impl Display for FleetOptions {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Self {
-            namespace,
-            experimental_oci_storage,
-            experimental_helm_ops,
-        } = self;
-        f.write_str(&format!(
-            "ns={namespace}, oci={experimental_oci_storage}, helm={experimental_helm_ops}"
-        ))
     }
 }
 
@@ -121,6 +103,18 @@ impl FleetChart {
         let mut install = Command::new("helm");
 
         install.args([&operation.to_string(), "fleet", "fleet/fleet"]);
+        let oci = self.feature_gates.experimental_oci_storage;
+        let helm_ops = self.feature_gates.experimental_oci_storage;
+        install.args([
+            "--set-string",
+            "extraEnv[0].name=EXPERIMENTAL_OCI_STORAGE",
+            "--set-string",
+            &format!("extraEnv[0].value={oci}",),
+            "--set-string",
+            "extraEnv[1].name=EXPERIMENTAL_HELM_OPS",
+            "--set-string",
+            &format!("extraEnv[1].value={helm_ops}",),
+        ]);
 
         if operation == &HelmOperation::Upgrade {
             install.arg("--reuse-values");
@@ -182,39 +176,5 @@ impl FleetChart {
         }
 
         Ok(install.spawn()?)
-    }
-}
-
-impl FleetOptions {
-    pub fn patch_fleet(&self, version: &str) -> FleetPatchResult<Child> {
-        let mut upgrade = Command::new("helm");
-
-        upgrade.args([
-            "upgrade",
-            "fleet",
-            "fleet/fleet",
-            "--reuse-values",
-            "--version",
-            version,
-        ]);
-
-        if !self.namespace.is_empty() {
-            upgrade.args(["--namespace", &self.namespace]);
-        }
-
-        upgrade.arg("--wait");
-
-        upgrade.args([
-            "--set-string",
-            "extraEnv[0].name=EXPERIMENTAL_OCI_STORAGE",
-            "--set-string",
-            &format!("extraEnv[0].value={}", self.experimental_oci_storage),
-            "--set-string",
-            "extraEnv[1].name=EXPERIMENTAL_HELM_OPS",
-            "--set-string",
-            &format!("extraEnv[1].value={}", self.experimental_helm_ops),
-        ]);
-
-        Ok(upgrade.spawn()?)
     }
 }

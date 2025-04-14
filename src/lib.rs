@@ -1,7 +1,7 @@
 use std::io;
 
 use controllers::{
-    addon_config::{AddonConfigSyncError, DynamicWatcherError, FleetPatchError, ConfigMapSyncError},
+    addon_config::{AddonConfigSyncError, DynamicWatcherError, FleetPatchError},
     helm, BundleError, SyncError,
 };
 use futures::channel::mpsc::TrySendError;
@@ -46,12 +46,6 @@ pub enum Error {
     // NB: awkward type because finalizer::Error embeds the reconciler error (which is this)
     // so boxing this error to break cycles
     FinalizerError(#[source] Box<kube::runtime::finalizer::Error<Error>>),
-
-    #[error("IllegalDocument")]
-    IllegalDocument,
-
-    #[error("ConfigMap sync error: {0}")]
-    ConfigMapSyncError(#[from] ConfigMapSyncError),
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
