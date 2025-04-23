@@ -65,4 +65,4 @@ jobs:
       - name: Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create ${{ env.TAG }} -d --generate-notes --discussion-category "Announcements" metadata.yaml _out/addon-components.yaml
+        run: gh release create ${{ env.TAG }} --generate-notes --discussion-category "Announcements" metadata.yaml _out/addon-components.yaml
