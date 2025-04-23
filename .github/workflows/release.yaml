@@ -16,6 +16,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      discussions: write
     steps:
       - name: Install just
         run: cargo install just
