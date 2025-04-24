@@ -155,6 +155,7 @@ pub struct FleetSettings {
 #[serde_as]
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct FleetSettingsSpec {
+    #[serde(default)]
     #[serde_as(as = "DisplayFromStr")]
     pub fleet: FleetChartValues,
 
