@@ -15,7 +15,7 @@ It provides the following functionality:
 
 ## Getting started
 
-You can refer to the provider [documentation](https://rancher-sandbox.github.io/cluster-api-addon-provider-fleet/) and the official `Fleet` [documentation](https://fleet.rancher.io/).
+You can refer to the provider [documentation](https://rancher.github.io/cluster-api-addon-provider-fleet/) and the official `Fleet` [documentation](https://fleet.rancher.io/).
 
 ## Installation
 
